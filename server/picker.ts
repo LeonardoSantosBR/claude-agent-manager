@@ -3,13 +3,13 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 
 /**
- * Seletor de pasta nativo. O browser não consegue devolver caminho absoluto
- * (`webkitdirectory` só dá o relativo), mas o servidor roda na mesma máquina —
- * então quem abre o diálogo do desktop é ele.
+ * Native folder picker. The browser can't hand back an absolute path
+ * (`webkitdirectory` only gives the relative one), but the server runs on the
+ * same machine — so it is the one opening the desktop dialog.
  */
 
 const PICKERS = [
-  { bin: 'zenity', args: (start: string) => ['--file-selection', '--directory', '--title=Escolha a pasta do projeto', `--filename=${start}/`] },
+  { bin: 'zenity', args: (start: string) => ['--file-selection', '--directory', '--title=Choose the project folder', `--filename=${start}/`] },
   { bin: 'kdialog', args: (start: string) => ['--getexistingdirectory', start] },
 ]
 
@@ -24,7 +24,7 @@ const available = PICKERS.find((picker) => which(picker.bin)) ?? null
 
 export const pickerName = available?.bin ?? null
 
-/** Um diálogo por vez — dois zenitys abertos confundem mais do que ajudam. */
+/** One dialog at a time — two open zenitys confuse more than they help. */
 let inFlight = false
 
 export class PickerError extends Error {}
@@ -32,15 +32,15 @@ export class PickerError extends Error {}
 export function pickFolder(startIn?: string): Promise<string | null> {
   if (!available) {
     throw new PickerError(
-      'nenhum seletor de pasta encontrado no sistema (instale zenity ou kdialog)',
+      'no folder picker found on this system (install zenity or kdialog)',
     )
   }
   if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
     throw new PickerError(
-      'servidor sem sessão gráfica — inicie o manager pelo terminal do seu desktop',
+      'server has no graphical session — start the manager from your desktop terminal',
     )
   }
-  if (inFlight) throw new PickerError('já tem um seletor aberto')
+  if (inFlight) throw new PickerError('a picker is already open')
 
   const start = startIn && existsSync(startIn) ? startIn : homedir()
   inFlight = true
@@ -53,11 +53,11 @@ export function pickFolder(startIn?: string): Promise<string | null> {
       (error, stdout) => {
         inFlight = false
         const path = stdout.trim()
-        // zenity/kdialog saem com 1 quando o usuário cancela.
+        // zenity/kdialog exit with 1 when the user cancels.
         if (error && !path) return resolve(null)
         if (!path) return resolve(null)
         if (!existsSync(path)) {
-          return reject(new PickerError(`pasta não encontrada: ${path}`))
+          return reject(new PickerError(`folder not found: ${path}`))
         }
         resolve(path)
       },

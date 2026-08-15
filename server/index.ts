@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage } from 'node:http'
 import express from 'express'
 import { WebSocketServer, type WebSocket } from 'ws'
-import type { ClientMessage, ServerMessage, SessionMeta } from '../shared/types.ts'
+import type { ClientMessage, Group, ServerMessage, SessionMeta } from '../shared/types.ts'
 import { CLAUDE_BIN, loadAccounts, PORT } from './config.ts'
 import { listHistory } from './history.ts'
 import { PickerError, pickerName, pickFolder } from './picker.ts'
@@ -14,7 +14,7 @@ let accounts = loadAccounts()
 const manager = new SessionManager(() => accounts)
 
 app.get('/api/accounts', (_req, res) => {
-  accounts = loadAccounts() // relê pra pegar login feito depois do boot
+  accounts = loadAccounts() // re-read to pick up a login done after boot
   res.json(accounts)
 })
 
@@ -32,10 +32,42 @@ app.post('/api/sessions', (req, res) => {
 
 app.patch('/api/sessions/:id', (req, res) => {
   try {
-    res.json(manager.rename(req.params.id, String(req.body.name ?? '')))
+    let meta: SessionMeta | undefined
+    if (req.body.name !== undefined) {
+      meta = manager.rename(req.params.id, String(req.body.name))
+    }
+    if (req.body.groupId !== undefined) {
+      meta = manager.moveSession(req.params.id, req.body.groupId)
+    }
+    res.json(meta ?? manager.list().find((s) => s.id === req.params.id))
   } catch (error) {
     res.status(404).json({ error: (error as Error).message })
   }
+})
+
+app.get('/api/groups', (_req, res) => {
+  res.json(manager.listGroups())
+})
+
+app.post('/api/groups', (req, res) => {
+  try {
+    res.json(manager.createGroup(String(req.body.name ?? ''), req.body.cwd))
+  } catch (error) {
+    res.status(400).json({ error: (error as Error).message })
+  }
+})
+
+app.patch('/api/groups/:id', (req, res) => {
+  try {
+    res.json(manager.updateGroup(req.params.id, req.body))
+  } catch (error) {
+    res.status(404).json({ error: (error as Error).message })
+  }
+})
+
+app.delete('/api/groups/:id', (req, res) => {
+  manager.removeGroup(req.params.id)
+  res.json({ ok: true })
 })
 
 app.post('/api/sessions/:id/restart', (req, res) => {
@@ -75,8 +107,8 @@ const server = createServer(app)
 const wss = new WebSocketServer({ noServer: true })
 
 server.on('upgrade', (request, socket, head) => {
-  // Cliente sumindo no meio do handshake é rotina (StrictMode, HMR, reload) —
-  // sem esse handler vira exceção não tratada e derruba o servidor.
+  // Clients vanishing mid-handshake is routine (StrictMode, HMR, reload) —
+  // without this handler it becomes an unhandled exception and kills the server.
   socket.on('error', () => {})
   const url = new URL(request.url ?? '/', 'http://localhost')
   if (url.pathname !== '/ws') return socket.destroy()
@@ -90,15 +122,16 @@ function send(ws: WebSocket, message: ServerMessage) {
 }
 
 wss.on('connection', (ws: WebSocket, _req: IncomingMessage, params: URLSearchParams) => {
-  ws.on('error', () => {}) // idem: EPIPE/ECONNRESET de cliente que fechou
+  ws.on('error', () => {}) // same: EPIPE/ECONNRESET from a client that closed
   const sessionId = params.get('session')
 
-  // Canal de eventos: só empurra a lista de sessões quando algo muda.
+  // Event channel: pushes the session list whenever something changes.
   if (!sessionId) {
-    const push = (sessions: SessionMeta[]) => send(ws, { type: 'sessions', sessions })
-    manager.on('sessions', push)
-    send(ws, { type: 'sessions', sessions: manager.list() })
-    ws.on('close', () => manager.off('sessions', push))
+    const push = (state: { sessions: SessionMeta[]; groups: Group[] }) =>
+      send(ws, { type: 'state', ...state })
+    manager.on('state', push)
+    send(ws, { type: 'state', sessions: manager.list(), groups: manager.listGroups() })
+    ws.on('close', () => manager.off('state', push))
     return
   }
 
@@ -106,7 +139,7 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage, params: URLSearchPar
   try {
     detach = manager.attach(sessionId, (data) => send(ws, { type: 'data', data }))
   } catch {
-    ws.close(4004, 'sessão não encontrada')
+    ws.close(4004, 'session not found')
     return
   }
 
@@ -131,15 +164,15 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage, params: URLSearchPar
     manager.off('exit', onExit)
   })
 
-  // Depois do replay, força a TUI a redesenhar por cima do buffer reenviado.
+  // After the replay, force the TUI to redraw over the resent buffer.
   setTimeout(() => manager.nudge(sessionId), 120)
 })
 
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') {
     console.error(
-      `[agent-manager] porta ${PORT} ocupada — já tem um servidor rodando?\n` +
-        `  lsof -i :${PORT}   (ou mude com PORT=xxxx)`,
+      `[agent-manager] port ${PORT} is busy — is another server already running?\n` +
+        `  lsof -i :${PORT}   (or change it with PORT=xxxx)`,
     )
     process.exit(1)
   }
@@ -149,10 +182,10 @@ server.on('error', (error: NodeJS.ErrnoException) => {
 server.listen(PORT, () => {
   console.log(
     `[agent-manager] http://localhost:${PORT}  claude=${CLAUDE_BIN}  ` +
-      `seletor de pasta=${pickerName ?? 'indisponível'}`,
+      `folder picker=${pickerName ?? 'unavailable'}`,
   )
   for (const account of accounts) {
-    const state = account.loggedIn ? 'ok' : 'SEM LOGIN'
-    console.log(`  conta ${account.id.padEnd(9)} ${account.configDir}  [${state}]`)
+    const state = account.loggedIn ? 'ok' : 'NOT LOGGED IN'
+    console.log(`  account ${account.id.padEnd(9)} ${account.configDir}  [${state}]`)
   }
 })

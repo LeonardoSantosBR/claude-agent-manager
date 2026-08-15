@@ -6,8 +6,12 @@ import type { Account } from '../shared/types.ts'
 
 export const PORT = Number(process.env.PORT ?? 5174)
 
-/** Onde guardamos nosso próprio estado (apelidos das sessões, contas). */
-export const STATE_DIR = join(homedir(), '.config', 'claude-agent-manager')
+/**
+ * Where we keep our own state (nicknames, groups, accounts).
+ * Overridable so a test instance can run without touching the real one.
+ */
+export const STATE_DIR =
+  process.env.AGENT_MANAGER_STATE_DIR ?? join(homedir(), '.config', 'claude-agent-manager')
 export const STATE_FILE = join(STATE_DIR, 'state.json')
 export const ACCOUNTS_FILE = join(STATE_DIR, 'accounts.json')
 
@@ -16,18 +20,18 @@ export function expandHome(p: string): string {
 }
 
 /**
- * `~/.claude` é o config dir padrão — mas com CLAUDE_CONFIG_DIR setado o Claude
- * Code passa a procurar o .claude.json *dentro* dele, em vez de em ~/.claude.json.
- * Setar a variável pra esse caminho não é no-op: derruba MCP servers, trust de
- * projeto e afins. Então, pra conta padrão, a gente simplesmente não seta.
+ * `~/.claude` is the default config dir — but with CLAUDE_CONFIG_DIR set, Claude
+ * Code starts looking for .claude.json *inside* it instead of at ~/.claude.json.
+ * Setting the variable to that path is not a no-op: it drops MCP servers, project
+ * trust and friends. So for the default account we simply don't set it.
  */
 export function isDefaultConfigDir(dir: string): boolean {
   return expandHome(dir) === join(homedir(), '.claude')
 }
 
 /**
- * O binário do claude. Resolvido uma vez no boot porque o PATH do servidor pode
- * não ser o mesmo do shell interativo.
+ * The claude binary. Resolved once at boot because the server's PATH may differ
+ * from the interactive shell's.
  */
 export const CLAUDE_BIN = (() => {
   if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN
@@ -39,8 +43,8 @@ export const CLAUDE_BIN = (() => {
 })()
 
 const DEFAULT_ACCOUNTS: Omit<Account, 'loggedIn'>[] = [
-  { id: 'personal', label: 'Pessoal', configDir: '~/.claude', color: '#FF6C37' },
-  { id: 'work', label: 'Empresa', configDir: '~/.claude-work', color: '#4EA1FF' },
+  { id: 'personal', label: 'Personal', configDir: '~/.claude', color: '#FF6C37' },
+  { id: 'work', label: 'Work', configDir: '~/.claude-work', color: '#4EA1FF' },
 ]
 
 function ensureStateDir() {

@@ -36,8 +36,8 @@ interface Props {
 }
 
 /**
- * Uma aba de terminal. Fica montada mesmo quando escondida pra não perder o
- * scrollback ao trocar de sessão — só o `display` muda.
+ * One terminal pane. Stays mounted even while hidden so switching sessions
+ * doesn't lose the scrollback — only `display` changes.
  */
 export function TerminalPane({ sessionId, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
@@ -79,7 +79,7 @@ export function TerminalPane({ sessionId, active }: Props) {
       if (message.type === 'data') term.write(message.data)
       if (message.type === 'exit') {
         term.write(
-          `\r\n\x1b[38;2;255;108;55m── sessão encerrada (código ${message.code ?? 0}) ──\x1b[0m\r\n`,
+          `\r\n\x1b[38;2;255;108;55m── session ended (code ${message.code ?? 0}) ──\x1b[0m\r\n`,
         )
       }
     }
@@ -87,12 +87,12 @@ export function TerminalPane({ sessionId, active }: Props) {
     const input = term.onData((data) => send({ type: 'input', data }))
 
     const observer = new ResizeObserver(() => {
-      if (!host.offsetParent) return // escondida: medir daria 0
+      if (!host.offsetParent) return // hidden: measuring would give 0
       try {
         fit.fit()
         send({ type: 'resize', cols: term.cols, rows: term.rows })
       } catch {
-        /* container ainda sem tamanho */
+        /* container has no size yet */
       }
     })
     observer.observe(host)

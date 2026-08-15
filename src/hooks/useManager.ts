@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Account, HistorySession, ServerMessage, SessionMeta } from '../../shared/types.ts'
+import type {
+  Account,
+  Group,
+  HistorySession,
+  ServerMessage,
+  SessionMeta,
+} from '../../shared/types.ts'
 import { api } from '../api.ts'
 import { closeSocket, wsUrl } from '../ws.ts'
 
 /**
- * Estado global do manager. A lista de sessões chega por websocket (o servidor
- * empurra a cada mudança); contas e histórico são buscados sob demanda.
+ * Global manager state. Sessions and groups arrive over the websocket (the
+ * server pushes on every change); accounts and history are fetched over HTTP —
+ * and refetched whenever the websocket (re)connects, otherwise a server that was
+ * down at load time would leave those lists empty forever.
  */
 export function useManager() {
   const [sessions, setSessions] = useState<SessionMeta[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [history, setHistory] = useState<HistorySession[]>([])
   const [connected, setConnected] = useState(false)
@@ -18,7 +27,7 @@ export function useManager() {
     try {
       setHistory(await api.history())
     } catch {
-      /* servidor ainda subindo */
+      /* server is down — the websocket reconnect will retry this */
     }
   }, [])
 
@@ -26,24 +35,7 @@ export function useManager() {
     try {
       setAccounts(await api.accounts())
     } catch {
-      /* idem */
-    }
-  }, [])
-
-  useEffect(() => {
-    let alive = true
-    Promise.all([api.accounts(), api.history()])
-      .then(([nextAccounts, nextHistory]) => {
-        if (!alive) return
-        setAccounts(nextAccounts)
-        setHistory(nextHistory)
-      })
-      .catch(() => {
-        /* servidor ainda subindo — o websocket reconecta e o usuário pode
-           recarregar; não vale derrubar a UI por isso. */
-      })
-    return () => {
-      alive = false
+      /* same */
     }
   }, [])
 
@@ -56,10 +48,24 @@ export function useManager() {
       const socket = new WebSocket(wsUrl('/ws'))
       socketRef.current = socket
 
-      socket.onopen = () => setConnected(true)
+      socket.onopen = () => {
+        setConnected(true)
+        Promise.all([api.accounts(), api.history()])
+          .then(([nextAccounts, nextHistory]) => {
+            if (closed) return
+            setAccounts(nextAccounts)
+            setHistory(nextHistory)
+          })
+          .catch(() => {
+            /* REST failed but the ws is up: the next reconnect retries */
+          })
+      }
       socket.onmessage = (event) => {
         const message = JSON.parse(event.data as string) as ServerMessage
-        if (message.type === 'sessions') setSessions(message.sessions)
+        if (message.type === 'state') {
+          setSessions(message.sessions)
+          setGroups(message.groups)
+        }
       }
       socket.onclose = () => {
         setConnected(false)
@@ -75,5 +81,5 @@ export function useManager() {
     }
   }, [])
 
-  return { sessions, accounts, history, connected, refreshHistory, refreshAccounts }
+  return { sessions, groups, accounts, history, connected, refreshHistory, refreshAccounts }
 }

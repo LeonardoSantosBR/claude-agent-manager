@@ -9,19 +9,21 @@ import { shortPath } from './utils.ts'
 import './App.css'
 
 function App() {
-  const { sessions, accounts, history, connected, refreshHistory } = useManager()
+  const { sessions, groups, accounts, history, connected, refreshHistory } = useManager()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [preferredAccount, setPreferredAccount] = useState<string | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
-  // Painéis já abertos nesta aba do browser — ficam montados pra preservar o
-  // scrollback do xterm ao alternar entre sessões.
+  // Group the modal opens with: undefined = closed.
+  const [modalGroup, setModalGroup] = useState<string | null | undefined>(undefined)
+  // Panes already opened in this browser tab — they stay mounted to preserve
+  // xterm's scrollback when switching between sessions.
   const [opened, setOpened] = useState<string[]>([])
 
-  // Tudo derivado da lista que vem do servidor: se uma sessão some, o painel
-  // dela some junto sem precisar de efeito de limpeza.
+  // Everything derives from the server's list: when a session disappears, its
+  // pane goes with it — no cleanup effect needed.
   const activeSession = sessions.find((s) => s.id === selectedId) ?? null
   const activeId = activeSession?.id ?? null
   const activeAccount = accounts.find((a) => a.id === activeSession?.accountId)
+  const activeGroup = groups.find((g) => g.id === activeSession?.groupId)
   const accountId =
     preferredAccount && accounts.some((a) => a.id === preferredAccount)
       ? preferredAccount
@@ -47,10 +49,13 @@ function App() {
   }
 
   const resume = async (entry: HistorySession) => {
+    // A resumed session lands in the group whose folder matches it, if any.
+    const group = groups.find((candidate) => candidate.cwd === entry.cwd)
     const session = await api.create({
       cwd: entry.cwd,
       accountId: entry.accountId,
       resumeId: entry.id,
+      groupId: group?.id ?? null,
       name: entry.preview.slice(0, 40) || entry.project,
     })
     open(session.id)
@@ -60,19 +65,25 @@ function App() {
     <div className="app">
       <Sidebar
         sessions={sessions}
+        groups={groups}
         accounts={accounts}
         history={history}
         activeId={activeId}
         activeAccountId={accountId}
         connected={connected}
         onSelect={open}
-        onNew={() => setModalOpen(true)}
+        onNew={(groupId) => setModalGroup(groupId)}
         onResume={(entry) => void resume(entry)}
         onRename={(id, name) => void api.rename(id, name)}
         onStop={(id) => void api.stop(id)}
         onRestart={(id) => void api.restart(id)}
         onRemove={(id) => void api.remove(id)}
         onAccountChange={setPreferredAccount}
+        onCreateGroup={(name) => void api.createGroup(name)}
+        onRenameGroup={(id, name) => void api.updateGroup(id, { name })}
+        onRemoveGroup={(id) => void api.removeGroup(id)}
+        onToggleGroup={(id, collapsed) => void api.updateGroup(id, { collapsed })}
+        onMoveSession={(id, groupId) => void api.move(id, groupId)}
       />
 
       <main className="stage">
@@ -80,13 +91,14 @@ function App() {
           <header className="stage-head">
             <div className="stage-title">
               <span className={`status ${activeSession.status}`} />
+              {activeGroup && <span className="crumb">{activeGroup.name} /</span>}
               <h1>{activeSession.name}</h1>
               <span className="path" title={activeSession.cwd}>
                 {shortPath(activeSession.cwd)}
               </span>
             </div>
             <div className="stage-meta">
-              {activeSession.resumed && <span className="chip">retomada</span>}
+              {activeSession.resumed && <span className="chip">resumed</span>}
               <span
                 className="chip account"
                 style={{ '--chip': activeAccount?.color ?? '#777' } as React.CSSProperties}
@@ -95,11 +107,11 @@ function App() {
               </span>
               {activeSession.status === 'stopped' ? (
                 <button type="button" onClick={() => void api.restart(activeSession.id)}>
-                  Retomar
+                  Resume
                 </button>
               ) : (
                 <button type="button" onClick={() => void api.stop(activeSession.id)}>
-                  Parar
+                  Stop
                 </button>
               )}
             </div>
@@ -118,24 +130,32 @@ function App() {
           ))}
           {!activeId && (
             <div className="placeholder">
+              {!connected && (
+                <p className="offline">
+                  Server is down. Check the terminal running <code>npm run dev</code> —
+                  this page reconnects on its own once it's back.
+                </p>
+              )}
               <p>
-                Escolha uma sessão na barra lateral, retome uma do histórico ou
-                abra uma nova.
+                Choose a session from the sidebar, resume one from your history, or
+                start a new one.
               </p>
-              <button type="button" onClick={() => setModalOpen(true)}>
-                + Nova sessão
+              <button type="button" onClick={() => setModalGroup(null)}>
+                + new session
               </button>
             </div>
           )}
         </div>
       </main>
 
-      {modalOpen && (
+      {modalGroup !== undefined && (
         <NewSessionModal
           accounts={accounts}
+          groups={groups}
           defaultAccountId={accountId}
+          defaultGroupId={modalGroup}
           knownPaths={knownPaths}
-          onClose={() => setModalOpen(false)}
+          onClose={() => setModalGroup(undefined)}
           onCreate={create}
         />
       )}

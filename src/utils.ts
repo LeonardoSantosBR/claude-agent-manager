@@ -1,16 +1,16 @@
 export function timeAgo(timestamp: number): string {
   const seconds = Math.max(0, (Date.now() - timestamp) / 1000)
-  if (seconds < 60) return 'agora'
+  if (seconds < 60) return 'now'
   const minutes = seconds / 60
   if (minutes < 60) return `${Math.floor(minutes)} min`
   const hours = minutes / 60
   if (hours < 24) return `${Math.floor(hours)} h`
   const days = hours / 24
   if (days < 30) return `${Math.floor(days)} d`
-  return new Date(timestamp).toLocaleDateString('pt-BR')
+  return new Date(timestamp).toLocaleDateString()
 }
 
-/** Encurta /home/user/a/b/c pra ~/a/b/c e corta o miolo se ficar comprido. */
+/** Shortens long paths to …/last/three/segments. */
 export function shortPath(path: string): string {
   const parts = path.split('/').filter(Boolean)
   if (parts.length <= 3) return path

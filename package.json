@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,web -c \"#FF6C37,#7db3e8\" \"npm:dev:server\" \"npm:dev:web\"",
+    "dev": "concurrently -k -n server,web -c \"#FF6C37,#7db3e8\" \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "node server/index.ts",
     "dev:server:watch": "node --watch server/index.ts",
     "dev:web": "vite",

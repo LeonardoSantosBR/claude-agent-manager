@@ -2,7 +2,7 @@ import { open, readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { Account, HistorySession } from '../shared/types.ts'
 
-/** Só lemos o começo do .jsonl — os arquivos passam fácil de 500KB. */
+/** We only read the head of each .jsonl — files easily pass 500KB. */
 const HEAD_BYTES = 128 * 1024
 const MAX_PER_ACCOUNT = 300
 
@@ -24,7 +24,7 @@ function extractText(content: unknown): string | null {
   return null
 }
 
-/** Lê o cabeçalho do arquivo atrás do cwd e da primeira mensagem humana. */
+/** Reads the file header looking for the cwd and the first human message. */
 async function peek(file: string): Promise<Peek> {
   const handle = await open(file, 'r')
   try {
@@ -39,14 +39,14 @@ async function peek(file: string): Promise<Peek> {
       try {
         record = JSON.parse(line)
       } catch {
-        continue // última linha do buffer costuma vir cortada
+        continue // the buffer's last line usually comes truncated
       }
       if (!result.cwd && typeof record.cwd === 'string') result.cwd = record.cwd
       if (result.preview) continue
       if (record.type !== 'user' || record.isSidechain) continue
       const message = record.message as { content?: unknown } | undefined
       const text = extractText(message?.content)?.trim()
-      // Pula system-reminders, saídas de comando e mensagens sintéticas.
+      // Skip system-reminders, command output and synthetic messages.
       if (!text || text.startsWith('<') || text.startsWith('Caveat:')) continue
       result.preview = text.replace(/\s+/g, ' ').slice(0, 140)
     }
@@ -57,8 +57,8 @@ async function peek(file: string): Promise<Peek> {
 }
 
 /**
- * Varre `<configDir>/projects/**\/<uuid>.jsonl`. É a fonte de verdade do
- * histórico — o próprio Claude Code escreve ali.
+ * Scans `<configDir>/projects/**\/<uuid>.jsonl`. That's the source of truth for
+ * history — Claude Code itself writes there.
  */
 export async function listHistory(
   accounts: Account[],
@@ -72,7 +72,7 @@ export async function listHistory(
     try {
       dirs = await readdir(root)
     } catch {
-      continue // conta ainda não usada
+      continue // account not used yet
     }
 
     const files: { path: string; mtime: number }[] = []
@@ -90,7 +90,7 @@ export async function listHistory(
           const info = await stat(path)
           if (info.size > 0) files.push({ path, mtime: info.mtimeMs })
         } catch {
-          /* sumiu no meio da varredura */
+          /* vanished mid-scan */
         }
       }
     }

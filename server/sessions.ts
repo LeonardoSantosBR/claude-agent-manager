@@ -4,17 +4,17 @@ import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 import pty from 'node-pty'
 import type { IPty } from 'node-pty'
-import type { Account, CreateSessionBody, SessionMeta } from '../shared/types.ts'
+import type { Account, CreateSessionBody, Group, SessionMeta } from '../shared/types.ts'
 import { CLAUDE_BIN, expandHome, isDefaultConfigDir } from './config.ts'
-import { loadSessions, saveSessions } from './store.ts'
+import { loadState, saveState } from './store.ts'
 
-/** Quanto de saída guardamos por sessão pra reenviar quando um cliente conecta. */
+/** How much output we keep per session to replay when a client connects. */
 const SCROLLBACK_LIMIT = 512 * 1024
 
 interface LiveSession {
   meta: SessionMeta
   proc: IPty | null
-  /** buffer circular de bytes crus (com ANSI) pro replay. */
+  /** ring buffer of raw bytes (ANSI included) for the replay. */
   buffer: string
   listeners: Set<(chunk: string) => void>
   cols: number
@@ -23,12 +23,15 @@ interface LiveSession {
 
 export class SessionManager extends EventEmitter {
   private sessions = new Map<string, LiveSession>()
+  private groups = new Map<string, Group>()
   private getAccounts: () => Account[]
 
   constructor(getAccounts: () => Account[]) {
     super()
     this.getAccounts = getAccounts
-    for (const meta of loadSessions()) {
+    const state = loadState()
+    for (const group of state.groups) this.groups.set(group.id, group)
+    for (const meta of state.sessions) {
       this.sessions.set(meta.id, {
         meta,
         proc: null,
@@ -46,28 +49,84 @@ export class SessionManager extends EventEmitter {
       .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
   }
 
+  listGroups(): Group[] {
+    return [...this.groups.values()].sort((a, b) => a.createdAt - b.createdAt)
+  }
+
+  createGroup(name: string, cwd?: string | null): Group {
+    const group: Group = {
+      id: randomUUID(),
+      name: name.trim() || 'New group',
+      cwd: cwd ? expandHome(cwd) : null,
+      collapsed: false,
+      createdAt: Date.now(),
+    }
+    this.groups.set(group.id, group)
+    this.persist()
+    return group
+  }
+
+  updateGroup(id: string, patch: Partial<Pick<Group, 'name' | 'cwd' | 'collapsed'>>): Group {
+    const group = this.groups.get(id)
+    if (!group) throw new Error('group not found')
+    if (patch.name !== undefined) group.name = patch.name.trim() || group.name
+    if (patch.cwd !== undefined) group.cwd = patch.cwd ? expandHome(patch.cwd) : null
+    if (patch.collapsed !== undefined) group.collapsed = patch.collapsed
+    this.persist()
+    return group
+  }
+
+  /** Deleting a group doesn't delete sessions — they just fall back to "No group". */
+  removeGroup(id: string) {
+    if (!this.groups.delete(id)) return
+    for (const session of this.sessions.values()) {
+      if (session.meta.groupId === id) session.meta.groupId = null
+    }
+    this.persist()
+  }
+
+  moveSession(id: string, groupId: string | null): SessionMeta {
+    const session = this.sessions.get(id)
+    if (!session) throw new Error('session not found')
+    if (groupId && !this.groups.has(groupId)) throw new Error('group not found')
+    session.meta.groupId = groupId
+    this.persist()
+    return session.meta
+  }
+
   get(id: string): LiveSession | undefined {
     return this.sessions.get(id)
   }
 
   private account(id: string): Account {
     const found = this.getAccounts().find((a) => a.id === id)
-    if (!found) throw new Error(`conta desconhecida: ${id}`)
+    if (!found) throw new Error(`unknown account: ${id}`)
     return found
   }
 
   private persist() {
-    saveSessions(this.list())
-    this.emit('sessions', this.list())
+    const state = { sessions: this.list(), groups: this.listGroups() }
+    saveState(state)
+    this.emit('state', state)
   }
 
   create(body: CreateSessionBody): SessionMeta {
     const cwd = expandHome(body.cwd)
-    if (!existsSync(cwd)) throw new Error(`pasta não existe: ${cwd}`)
+    if (!existsSync(cwd)) throw new Error(`folder does not exist: ${cwd}`)
     const account = this.account(body.accountId)
 
-    // Reaproveitar o id do histórico mantém a sessão retomada como *a mesma*
-    // sessão do Claude, em vez de criar uma cópia paralela.
+    const group = body.newGroupName?.trim()
+      ? this.createGroup(body.newGroupName, cwd)
+      : body.groupId
+        ? this.groups.get(body.groupId)
+        : null
+    if (body.groupId && !group) throw new Error('group not found')
+    // The group learns its folder from the first session dropped into it, to
+    // prefill the next ones.
+    if (group && !group.cwd) group.cwd = cwd
+
+    // Reusing the history id keeps the resumed session as *the same* Claude
+    // session, instead of creating a parallel copy.
     const id = body.resumeId ?? randomUUID()
     if (this.sessions.has(id)) {
       const existing = this.sessions.get(id)!
@@ -80,6 +139,7 @@ export class SessionManager extends EventEmitter {
       name: body.name?.trim() || basename(cwd),
       cwd,
       project: basename(cwd),
+      groupId: group?.id ?? null,
       accountId: account.id,
       status: 'stopped',
       createdAt: Date.now(),
@@ -102,10 +162,10 @@ export class SessionManager extends EventEmitter {
     return meta
   }
 
-  /** Reinicia uma sessão parada retomando o histórico do Claude (--resume). */
+  /** Restarts a stopped session, resuming Claude's history (--resume). */
   restart(id: string): SessionMeta {
     const session = this.sessions.get(id)
-    if (!session) throw new Error('sessão não encontrada')
+    if (!session) throw new Error('session not found')
     if (session.proc) return session.meta
     session.buffer = ''
     this.spawn(session, true)
@@ -126,8 +186,8 @@ export class SessionManager extends EventEmitter {
       FORCE_COLOR: '3',
     }
 
-    // É daqui que sai a separação entre as duas contas Pro: cada config dir tem
-    // seu próprio .credentials.json. A conta padrão roda sem a variável — ver
+    // This is what separates the two Pro accounts: each config dir has its own
+    // .credentials.json. The default account runs without the variable — see
     // isDefaultConfigDir().
     if (isDefaultConfigDir(account.configDir)) {
       delete env.CLAUDE_CONFIG_DIR
@@ -182,18 +242,18 @@ export class SessionManager extends EventEmitter {
     try {
       session.proc?.resize(cols, rows)
     } catch {
-      /* pty já morreu */
+      /* pty already died */
     }
   }
 
   /**
-   * Reenvia o scrollback e devolve o unsubscribe. O nudge de resize força a TUI
-   * do Claude a se redesenhar inteira — sem isso a tela reconectada fica com o
-   * lixo do replay.
+   * Replays the scrollback and returns the unsubscribe. The resize nudge forces
+   * Claude's TUI to redraw in full — without it, a reconnected screen keeps the
+   * garbage left by the replay.
    */
   attach(id: string, listener: (chunk: string) => void): () => void {
     const session = this.sessions.get(id)
-    if (!session) throw new Error('sessão não encontrada')
+    if (!session) throw new Error('session not found')
     if (session.buffer) listener(session.buffer)
     session.listeners.add(listener)
     return () => session.listeners.delete(listener)
@@ -219,7 +279,7 @@ export class SessionManager extends EventEmitter {
 
   rename(id: string, name: string) {
     const session = this.sessions.get(id)
-    if (!session) throw new Error('sessão não encontrada')
+    if (!session) throw new Error('session not found')
     session.meta.name = name.trim() || session.meta.project
     this.persist()
     return session.meta
