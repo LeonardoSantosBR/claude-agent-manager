@@ -230,7 +230,7 @@ export function Sidebar(props: Props) {
             setTab('live')
           }}
         >
-          + Group
+          + group
         </button>
       </div>
 
@@ -243,14 +243,14 @@ export function Sidebar(props: Props) {
 
       <nav className="tabs">
         <button type="button" className={tab === 'live' ? 'on' : ''} onClick={() => setTab('live')}>
-          Sessions <span className="count">{props.sessions.length}</span>
+          sessions <span className="count">{props.sessions.length}</span>
         </button>
         <button
           type="button"
           className={tab === 'history' ? 'on' : ''}
           onClick={() => setTab('history')}
         >
-          History
+          history
         </button>
       </nav>
 

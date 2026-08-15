@@ -12,6 +12,8 @@
   min-height: 0;
   gap: 10px;
   padding: 14px 12px;
+  /* base da sidebar: botões e inputs herdam daqui (font: inherit) */
+  font-size: 10px;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--line);
 }
@@ -26,7 +28,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -62,8 +64,8 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 8px;
-  font-size: 12.5px;
+  padding: 5px 8px;
+  font-size: 11px;
   background: transparent;
   border-color: var(--line-soft);
   color: var(--muted);
@@ -95,7 +97,7 @@
 .login-hint {
   margin: 0;
   padding: 8px 9px;
-  font-size: 11.5px;
+  font-size: 10.5px;
   line-height: 1.5;
   color: var(--muted);
   background: #3a3a3a;
@@ -131,8 +133,8 @@
 
 .tabs button {
   flex: 1;
-  padding: 5px 8px;
-  font-size: 12.5px;
+  padding: 4px 8px;
+  font-size: 11px;
   color: var(--muted);
   background: transparent;
   border-color: transparent;
@@ -146,9 +148,9 @@
 
 .count {
   display: inline-block;
-  min-width: 17px;
+  min-width: 16px;
   padding: 0 4px;
-  font-size: 10.5px;
+  font-size: 9.5px;
   text-align: center;
   border-radius: 9px;
   background: #4d4d4d;
@@ -165,7 +167,7 @@
 
 .empty {
   padding: 18px 6px;
-  font-size: 12.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -180,7 +182,7 @@
 
 .new-group {
   flex: none;
-  font-size: 12.5px;
+  font-size: 11px;
   color: var(--muted);
   background: transparent;
 }
@@ -202,8 +204,8 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  margin: 12px 0 5px;
-  font-size: 11px;
+  margin: 10px 0 4px;
+  font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -226,7 +228,7 @@
 .chevron {
   flex: none;
   padding: 0 3px;
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1;
   color: var(--faint);
   background: transparent;
@@ -244,7 +246,7 @@
 
 .group-actions button {
   padding: 0 5px;
-  font-size: 11px;
+  font-size: 9.5px;
   line-height: 1.5;
   color: var(--muted);
   background: transparent;
@@ -258,8 +260,8 @@
 
 .group-empty {
   margin: 2px 0 6px;
-  padding: 7px 9px;
-  font-size: 11.5px;
+  padding: 6px 9px;
+  font-size: 10px;
   color: var(--faint);
   border: 1px dashed var(--line);
   border-radius: 6px;
@@ -284,11 +286,11 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 8px;
+  padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  font-size: 13px;
+  font-size: 11.5px;
   text-align: left;
   cursor: pointer;
 }
@@ -313,7 +315,7 @@
 .rename {
   flex: 1;
   padding: 2px 5px;
-  font-size: 13px;
+  font-size: 11.5px;
 }
 
 .status {
@@ -348,7 +350,7 @@
 
 .row-actions button {
   padding: 1px 5px;
-  font-size: 11px;
+  font-size: 9.5px;
   line-height: 1.4;
   color: var(--muted);
   background: transparent;
@@ -374,7 +376,7 @@
 }
 
 .row-sub {
-  font-size: 11px;
+  font-size: 9.5px;
   color: var(--faint);
 }
 

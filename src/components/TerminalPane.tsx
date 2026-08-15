@@ -51,7 +51,7 @@ export function TerminalPane({ sessionId, active }: Props) {
     const term = new Terminal({
       allowProposedApi: true,
       cursorBlink: true,
-      fontSize: 13,
+      fontSize: 9,
       fontFamily:
         '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace',
       lineHeight: 1.25,
