@@ -177,7 +177,7 @@ export function NewSessionModal(props: Props) {
             Cancel
           </button>
           <button type="submit" disabled={busy || offline || !cwd.trim()}>
-            {busy ? 'Opening…' : 'Open session'}
+            {busy ? 'opening…' : 'open session'}
           </button>
         </div>
       </form>
