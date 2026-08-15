@@ -4,21 +4,33 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n server,web -c \"#FF6C37,#7db3e8\" \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node server/index.ts",
+    "dev:server:watch": "node --watch server/index.ts",
+    "dev:web": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "express": "^5.2.1",
+    "node-pty": "^1.1.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^6.0.4",
+    "concurrently": "^10.0.4",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
