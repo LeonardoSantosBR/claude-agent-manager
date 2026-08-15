@@ -1,8 +1,8 @@
-import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { Account } from '../shared/types.ts'
+import { which } from './which.ts'
 
 export const PORT = Number(process.env.PORT ?? 5174)
 
@@ -31,16 +31,10 @@ export function isDefaultConfigDir(dir: string): boolean {
 
 /**
  * The claude binary. Resolved once at boot because the server's PATH may differ
- * from the interactive shell's.
+ * from the interactive shell's — and because node-pty needs a full path with the
+ * extension on Windows (see which()).
  */
-export const CLAUDE_BIN = (() => {
-  if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN
-  try {
-    return execFileSync('which', ['claude'], { encoding: 'utf8' }).trim()
-  } catch {
-    return 'claude'
-  }
-})()
+export const CLAUDE_BIN = process.env.CLAUDE_BIN ?? which('claude') ?? 'claude'
 
 const DEFAULT_ACCOUNTS: Omit<Account, 'loggedIn'>[] = [
   { id: 'personal', label: 'Personal', configDir: '~/.claude', color: '#FF6C37' },

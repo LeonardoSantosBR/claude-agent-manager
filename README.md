@@ -50,11 +50,13 @@ browser (xterm.js) ──ws──▶ server/sessions.ts ──node-pty──▶ 
   message — Claude writes no `.jsonl` for those and `--resume` exits with
   "No conversation found". In that case it starts fresh under the same id
   (`hasSessionHistory()` in [server/history.ts](server/history.ts)).
-- The modal's **Browse** button opens the desktop folder picker through `zenity`
-  (or `kdialog`) — the server spawns it, because the browser only hands back a
-  relative path. That requires starting the manager from a terminal in your
-  graphical session; without `DISPLAY`/`WAYLAND_DISPLAY` the button explains why
-  and the text field still works.
+- The modal's **Browse** button opens the desktop folder picker — the server
+  spawns it, because the browser only hands back a relative path. The backend is
+  picked per platform: a WinForms dialog through `powershell` on Windows,
+  `osascript` on macOS, `zenity` (or `kdialog`) on Linux. On Linux that requires
+  starting the manager from a terminal in your graphical session; without
+  `DISPLAY`/`WAYLAND_DISPLAY` the button explains why and the text field still
+  works.
 - Sessions edit real files in their `cwd` — same filesystem your editor sees, and
   Claude's usual permission prompts show up inside the pane. They run in a plain
   PTY, so there's no VSCode integration by default; `/ide` inside a session
