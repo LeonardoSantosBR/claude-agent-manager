@@ -465,6 +465,33 @@
   height: 100%;
 }
 
+.stopped-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(680px, calc(100% - 40px));
+  padding: 10px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: #2e2e2e;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.stopped-bar button {
+  flex: none;
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .placeholder {
   display: flex;
   flex-direction: column;

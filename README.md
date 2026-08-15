@@ -40,11 +40,29 @@ browser (xterm.js) ──ws──▶ server/sessions.ts ──node-pty──▶ 
   `~/.config/claude-agent-manager/state.json` (override with
   `AGENT_MANAGER_STATE_DIR`). If the server goes down, sessions come back listed
   as stopped and the ▸ button resumes each one where it left off.
+- **Restarting the server doesn't lose a session.** Two different things are
+  saved: the conversation is Claude's own (`<config-dir>/projects/*.jsonl`), and
+  the *rendered screen* is ours, in
+  `~/.config/claude-agent-manager/scrollback/<id>.ansi` — throttled while running
+  and flushed on `SIGINT`, so Ctrl+C keeps the last frame. Reopening a stopped
+  session shows that frame plus a bar offering to resume, instead of a blank pane.
+- Resume runs `claude --resume <id>`, **unless** that session never exchanged a
+  message — Claude writes no `.jsonl` for those and `--resume` exits with
+  "No conversation found". In that case it starts fresh under the same id
+  (`hasSessionHistory()` in [server/history.ts](server/history.ts)).
 - The modal's **Browse** button opens the desktop folder picker through `zenity`
   (or `kdialog`) — the server spawns it, because the browser only hands back a
   relative path. That requires starting the manager from a terminal in your
   graphical session; without `DISPLAY`/`WAYLAND_DISPLAY` the button explains why
   and the text field still works.
+- Sessions edit real files in their `cwd` — same filesystem your editor sees, and
+  Claude's usual permission prompts show up inside the pane. They run in a plain
+  PTY, so there's no VSCode integration by default; `/ide` inside a session
+  connects it to a running editor window. Session-scoped `CLAUDE_CODE_*`
+  variables from the parent shell are stripped before spawning
+  (`INHERITED_SESSION_VARS` in [server/sessions.ts](server/sessions.ts)),
+  otherwise agents launched from a Claude-owned terminal inherit another
+  session's identity.
 - The **History** tab reads `<config-dir>/projects/*/<uuid>.jsonl` — the history
   Claude Code writes itself. Clicking an entry resumes that conversation.
 

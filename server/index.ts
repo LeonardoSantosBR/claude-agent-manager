@@ -6,6 +6,7 @@ import { CLAUDE_BIN, loadAccounts, PORT } from './config.ts'
 import { listHistory } from './history.ts'
 import { PickerError, pickerName, pickFolder } from './picker.ts'
 import { SessionManager } from './sessions.ts'
+import { flushState } from './store.ts'
 
 const app = express()
 app.use(express.json())
@@ -167,6 +168,19 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage, params: URLSearchPar
   // After the replay, force the TUI to redraw over the resent buffer.
   setTimeout(() => manager.nudge(sessionId), 120)
 })
+
+// Ctrl+C on the dev server is the normal way this process dies, so the last
+// screen and the last metadata edit have to make it to disk here.
+let shuttingDown = false
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    if (shuttingDown) return
+    shuttingDown = true
+    manager.shutdown()
+    flushState()
+    process.exit(0)
+  })
+}
 
 server.on('error', (error: NodeJS.ErrnoException) => {
   if (error.code === 'EADDRINUSE') {

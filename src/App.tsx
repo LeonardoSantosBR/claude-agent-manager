@@ -128,6 +128,18 @@ function App() {
           {mounted.map((id) => (
             <TerminalPane key={id} sessionId={id} active={id === activeId} />
           ))}
+
+          {activeSession?.status === 'stopped' && (
+            <div className="stopped-bar">
+              <span>
+                Stopped — this is the last screen before it ended. The conversation
+                itself is safe in Claude's history.
+              </span>
+              <button type="button" onClick={() => void api.restart(activeSession.id)}>
+                Resume where it left off
+              </button>
+            </div>
+          )}
           {!activeId && (
             <div className="placeholder">
               {!connected && (

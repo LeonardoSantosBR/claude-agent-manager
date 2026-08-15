@@ -1,6 +1,27 @@
+import { existsSync, readdirSync } from 'node:fs'
 import { open, readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { Account, HistorySession } from '../shared/types.ts'
+
+/**
+ * Does Claude have a conversation on file for this session id?
+ *
+ * Claude only writes `<uuid>.jsonl` once a session actually exchanges a
+ * message, and `claude --resume` on a session without one bails out with
+ * "No conversation found with session ID". We scan the project dirs instead of
+ * rebuilding Claude's cwd-to-slug encoding, which mangles dots as well as
+ * slashes.
+ */
+export function hasSessionHistory(configDir: string, id: string): boolean {
+  const root = join(configDir, 'projects')
+  let dirs: string[]
+  try {
+    dirs = readdirSync(root)
+  } catch {
+    return false
+  }
+  return dirs.some((dir) => existsSync(join(root, dir, `${id}.jsonl`)))
+}
 
 /** We only read the head of each .jsonl — files easily pass 500KB. */
 const HEAD_BYTES = 128 * 1024

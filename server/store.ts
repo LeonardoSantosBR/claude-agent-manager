@@ -38,12 +38,26 @@ export function loadState(): PersistedState {
 }
 
 let pending: NodeJS.Timeout | null = null
+let latest: PersistedState | null = null
+
+function write() {
+  if (!latest) return
+  ensureStateDir()
+  writeFileSync(STATE_FILE, JSON.stringify(latest, null, 2))
+}
 
 export function saveState(state: PersistedState) {
+  latest = state
   if (pending) clearTimeout(pending)
   pending = setTimeout(() => {
-    ensureStateDir()
-    writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+    write()
     pending = null
   }, 250)
+}
+
+/** Synchronous flush for shutdown — a quick Ctrl+C must not drop the last edit. */
+export function flushState() {
+  if (pending) clearTimeout(pending)
+  pending = null
+  write()
 }

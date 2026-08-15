@@ -6,10 +6,29 @@ import pty from 'node-pty'
 import type { IPty } from 'node-pty'
 import type { Account, CreateSessionBody, Group, SessionMeta } from '../shared/types.ts'
 import { CLAUDE_BIN, expandHome, isDefaultConfigDir } from './config.ts'
+import { hasSessionHistory } from './history.ts'
+import { dropScrollback, flushScrollback, readScrollback, saveScrollback } from './scrollback.ts'
 import { loadState, saveState } from './store.ts'
 
 /** How much output we keep per session to replay when a client connects. */
 const SCROLLBACK_LIMIT = 512 * 1024
+
+/**
+ * Variables a running Claude Code injects into its own child processes. They
+ * describe *that* session, so they must never reach a session we spawn.
+ * Anything else (including the user's own CLAUDE_CODE_* feature flags) passes
+ * through untouched.
+ */
+const INHERITED_SESSION_VARS = [
+  'CLAUDECODE',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_SSE_PORT',
+]
 
 interface LiveSession {
   meta: SessionMeta
@@ -17,6 +36,8 @@ interface LiveSession {
   /** ring buffer of raw bytes (ANSI included) for the replay. */
   buffer: string
   listeners: Set<(chunk: string) => void>
+  /** set on restart: the first chunk of the new process replaces the old screen. */
+  resetOnNextChunk?: boolean
   cols: number
   rows: number
 }
@@ -35,7 +56,8 @@ export class SessionManager extends EventEmitter {
       this.sessions.set(meta.id, {
         meta,
         proc: null,
-        buffer: '',
+        // Last rendered screen from before the restart, so the pane isn't blank.
+        buffer: readScrollback(meta.id),
         listeners: new Set(),
         cols: 120,
         rows: 30,
@@ -167,7 +189,9 @@ export class SessionManager extends EventEmitter {
     const session = this.sessions.get(id)
     if (!session) throw new Error('session not found')
     if (session.proc) return session.meta
-    session.buffer = ''
+    // Keep the old screen up until the new process draws — if the spawn fails,
+    // its error lands on top instead of leaving a blank pane.
+    session.resetOnNextChunk = true
     this.spawn(session, true)
     this.persist()
     return session.meta
@@ -175,7 +199,11 @@ export class SessionManager extends EventEmitter {
 
   private spawn(session: LiveSession, resume: boolean) {
     const account = this.account(session.meta.accountId)
-    const args = resume
+    // A session that never exchanged a message has no .jsonl yet, and
+    // `claude --resume` bails with "No conversation found" and exits. Fall back
+    // to starting fresh under the same id, so the session keeps its identity.
+    const canResume = resume && hasSessionHistory(account.configDir, session.meta.id)
+    const args = canResume
       ? ['--resume', session.meta.id]
       : ['--session-id', session.meta.id]
 
@@ -185,6 +213,12 @@ export class SessionManager extends EventEmitter {
       COLORTERM: 'truecolor',
       FORCE_COLOR: '3',
     }
+
+    // Started from a terminal that already belongs to a Claude session (a VSCode
+    // integrated terminal, say), the whole parent environment would be inherited
+    // and every agent here would come up believing it is that session's child —
+    // pointing at a messaging socket and an IDE port that aren't its own.
+    for (const leaked of INHERITED_SESSION_VARS) delete env[leaked]
 
     // This is what separates the two Pro accounts: each config dir has its own
     // .credentials.json. The default account runs without the variable — see
@@ -209,15 +243,23 @@ export class SessionManager extends EventEmitter {
     session.meta.lastActivityAt = Date.now()
 
     proc.onData((chunk) => {
+      if (session.resetOnNextChunk) {
+        session.buffer = ''
+        session.resetOnNextChunk = false
+      }
       session.buffer += chunk
       if (session.buffer.length > SCROLLBACK_LIMIT) {
         session.buffer = session.buffer.slice(-SCROLLBACK_LIMIT)
       }
       session.meta.lastActivityAt = Date.now()
+      saveScrollback(session.meta.id, session.buffer)
       for (const listener of session.listeners) listener(chunk)
     })
 
     proc.onExit(({ exitCode }) => {
+      // The final screen matters most — it's what you come back to.
+      saveScrollback(session.meta.id, session.buffer)
+      flushScrollback()
       session.proc = null
       session.meta.status = 'stopped'
       session.meta.exitCode = exitCode
@@ -291,10 +333,19 @@ export class SessionManager extends EventEmitter {
     session.proc.kill()
   }
 
+  /** Flushes every live session's screen to disk before the process dies. */
+  shutdown() {
+    for (const session of this.sessions.values()) {
+      if (session.buffer) saveScrollback(session.meta.id, session.buffer)
+    }
+    flushScrollback()
+  }
+
   remove(id: string) {
     const session = this.sessions.get(id)
     if (!session) return
     session.proc?.kill()
+    dropScrollback(id)
     this.sessions.delete(id)
     this.persist()
   }
