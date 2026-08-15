@@ -1,121 +1,177 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+import { useCallback, useMemo, useState } from 'react'
+import type { CreateSessionBody, HistorySession } from '../shared/types.ts'
+import { api } from './api.ts'
+import { NewSessionModal } from './components/NewSessionModal.tsx'
+import { Sidebar } from './components/Sidebar.tsx'
+import { TerminalPane } from './components/TerminalPane.tsx'
+import { useManager } from './hooks/useManager.ts'
+import { shortPath } from './utils.ts'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const { sessions, groups, accounts, history, connected, refreshHistory } = useManager()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [preferredAccount, setPreferredAccount] = useState<string | null>(null)
+  // Group the modal opens with: undefined = closed.
+  const [modalGroup, setModalGroup] = useState<string | null | undefined>(undefined)
+  // Panes already opened in this browser tab — they stay mounted to preserve
+  // xterm's scrollback when switching between sessions.
+  const [opened, setOpened] = useState<string[]>([])
+
+  // Everything derives from the server's list: when a session disappears, its
+  // pane goes with it — no cleanup effect needed.
+  const activeSession = sessions.find((s) => s.id === selectedId) ?? null
+  const activeId = activeSession?.id ?? null
+  const activeAccount = accounts.find((a) => a.id === activeSession?.accountId)
+  const activeGroup = groups.find((g) => g.id === activeSession?.groupId)
+  const accountId =
+    preferredAccount && accounts.some((a) => a.id === preferredAccount)
+      ? preferredAccount
+      : (accounts[0]?.id ?? 'personal')
+  const mounted = opened.filter((id) => sessions.some((s) => s.id === id))
+
+  const open = useCallback((id: string) => {
+    setSelectedId(id)
+    setOpened((current) => (current.includes(id) ? current : [...current, id]))
+  }, [])
+
+  const knownPaths = useMemo(() => {
+    const paths = new Set<string>()
+    for (const session of sessions) paths.add(session.cwd)
+    for (const entry of history) paths.add(entry.cwd)
+    return [...paths]
+  }, [sessions, history])
+
+  const create = async (body: CreateSessionBody) => {
+    const session = await api.create(body)
+    open(session.id)
+    void refreshHistory()
+  }
+
+  const resume = async (entry: HistorySession) => {
+    // A resumed session lands in the group whose folder matches it, if any.
+    const group = groups.find((candidate) => candidate.cwd === entry.cwd)
+    const session = await api.create({
+      cwd: entry.cwd,
+      accountId: entry.accountId,
+      resumeId: entry.id,
+      groupId: group?.id ?? null,
+      name: entry.preview.slice(0, 40) || entry.project,
+    })
+    open(session.id)
+  }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app">
+      <Sidebar
+        sessions={sessions}
+        groups={groups}
+        accounts={accounts}
+        history={history}
+        activeId={activeId}
+        activeAccountId={accountId}
+        connected={connected}
+        onSelect={open}
+        onNew={(groupId) => setModalGroup(groupId)}
+        onResume={(entry) => void resume(entry)}
+        onRename={(id, name) => void api.rename(id, name)}
+        onStop={(id) => void api.stop(id)}
+        onRestart={(id) => void api.restart(id)}
+        onRemove={(id) => void api.remove(id)}
+        onAccountChange={setPreferredAccount}
+        onCreateGroup={(name) => void api.createGroup(name)}
+        onRenameGroup={(id, name) => void api.updateGroup(id, { name })}
+        onRemoveGroup={(id) => void api.removeGroup(id)}
+        onToggleGroup={(id, collapsed) => void api.updateGroup(id, { collapsed })}
+        onMoveSession={(id, groupId) => void api.move(id, groupId)}
+      />
 
-      <div className="ticks"></div>
+      <main className="stage">
+        {activeSession ? (
+          <header className="stage-head">
+            <div className="stage-title">
+              <span className={`status ${activeSession.status}`} />
+              {activeGroup && <span className="crumb">{activeGroup.name} /</span>}
+              <h1>{activeSession.name}</h1>
+              <span className="path" title={activeSession.cwd}>
+                {shortPath(activeSession.cwd)}
+              </span>
+            </div>
+            <div className="stage-meta">
+              {activeSession.resumed && <span className="chip">resumed</span>}
+              <span
+                className="chip account"
+                style={{ '--chip': activeAccount?.color ?? '#777' } as React.CSSProperties}
+              >
+                {activeAccount?.label ?? activeSession.accountId}
+              </span>
+              {activeSession.status === 'stopped' ? (
+                <button type="button" onClick={() => void api.restart(activeSession.id)}>
+                  Resume
+                </button>
+              ) : (
+                <button type="button" onClick={() => void api.stop(activeSession.id)}>
+                  Stop
+                </button>
+              )}
+            </div>
+          </header>
+        ) : (
+          <header className="stage-head">
+            <div className="stage-title">
+              <h1>claude agent manager</h1>
+            </div>
+          </header>
+        )}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        <div className="terminals">
+          {mounted.map((id) => (
+            <TerminalPane key={id} sessionId={id} active={id === activeId} />
+          ))}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+          {activeSession?.status === 'stopped' && (
+            <div className="stopped-bar">
+              <span>
+                Stopped — this is the last screen before it ended. The conversation
+                itself is safe in Claude's history.
+              </span>
+              <button type="button" onClick={() => void api.restart(activeSession.id)}>
+                Resume where it left off
+              </button>
+            </div>
+          )}
+          {!activeId && (
+            <div className="placeholder">
+              {!connected && (
+                <p className="offline">
+                  Server is down. Check the terminal running <code>npm run dev</code> —
+                  this page reconnects on its own once it's back.
+                </p>
+              )}
+              <p>
+                Choose a session from the sidebar, resume one from your history, or
+                start a new one.
+              </p>
+              <button type="button" onClick={() => setModalGroup(null)}>
+                + new session
+              </button>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {modalGroup !== undefined && (
+        <NewSessionModal
+          accounts={accounts}
+          groups={groups}
+          defaultAccountId={accountId}
+          defaultGroupId={modalGroup}
+          knownPaths={knownPaths}
+          onClose={() => setModalGroup(undefined)}
+          onCreate={create}
+        />
+      )}
+    </div>
   )
 }
 
