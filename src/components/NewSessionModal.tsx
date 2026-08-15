@@ -78,10 +78,10 @@ export function NewSessionModal(props: Props) {
   return (
     <div className="modal-backdrop" onClick={props.onClose}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2>new session</h2>
+        <h2>New session</h2>
 
         <label>
-          name
+          Name
           <input
             autoFocus
             placeholder="e.g. checkout refactor"
@@ -91,7 +91,7 @@ export function NewSessionModal(props: Props) {
         </label>
 
         <label>
-          group
+          Group
           <select value={groupId} onChange={(event) => pickGroup(event.target.value)}>
             <option value="">— no group —</option>
             {props.groups.map((group) => (
@@ -105,7 +105,7 @@ export function NewSessionModal(props: Props) {
 
         {groupId === NEW_GROUP && (
           <label>
-            group name
+            Group Name
             <input
               required
               placeholder="e.g. curiosity"
@@ -116,7 +116,7 @@ export function NewSessionModal(props: Props) {
         )}
 
         <label>
-          project folder
+          Project Folder
           <span className="path-field">
             <input
               required
@@ -143,7 +143,7 @@ export function NewSessionModal(props: Props) {
         </label>
 
         <label>
-          account
+          Account
           <select
             value={accountId}
             disabled={offline}
@@ -177,7 +177,7 @@ export function NewSessionModal(props: Props) {
             Cancel
           </button>
           <button type="submit" disabled={busy || offline || !cwd.trim()}>
-            {busy ? 'opening…' : 'open session'}
+            {busy ? 'Opening…' : 'Open session'}
           </button>
         </div>
       </form>

@@ -219,7 +219,7 @@ export function Sidebar(props: Props) {
 
       <div className="head-actions">
         <button type="button" className="new-session" onClick={() => props.onNew(null)}>
-          + new session
+          + New session
         </button>
         <button
           type="button"
@@ -230,27 +230,27 @@ export function Sidebar(props: Props) {
             setTab('live')
           }}
         >
-          + group
+          + Group
         </button>
       </div>
 
       <input
         className="search"
-        placeholder="filter sessions…"
+        placeholder="Filter sessions…"
         value={filter}
         onChange={(event) => setFilter(event.target.value)}
       />
 
       <nav className="tabs">
         <button type="button" className={tab === 'live' ? 'on' : ''} onClick={() => setTab('live')}>
-          sessions <span className="count">{props.sessions.length}</span>
+          Sessions <span className="count">{props.sessions.length}</span>
         </button>
         <button
           type="button"
           className={tab === 'history' ? 'on' : ''}
           onClick={() => setTab('history')}
         >
-          history
+          History
         </button>
       </nav>
 
