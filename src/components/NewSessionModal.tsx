@@ -81,7 +81,7 @@ export function NewSessionModal(props: Props) {
         <h2>new session</h2>
 
         <label>
-          Name
+          name
           <input
             autoFocus
             placeholder="e.g. checkout refactor"
@@ -91,7 +91,7 @@ export function NewSessionModal(props: Props) {
         </label>
 
         <label>
-          Group
+          group
           <select value={groupId} onChange={(event) => pickGroup(event.target.value)}>
             <option value="">— no group —</option>
             {props.groups.map((group) => (
@@ -105,7 +105,7 @@ export function NewSessionModal(props: Props) {
 
         {groupId === NEW_GROUP && (
           <label>
-            Group name
+            group name
             <input
               required
               placeholder="e.g. curiosity"
@@ -116,7 +116,7 @@ export function NewSessionModal(props: Props) {
         )}
 
         <label>
-          Project folder
+          project folder
           <span className="path-field">
             <input
               required
@@ -143,7 +143,7 @@ export function NewSessionModal(props: Props) {
         </label>
 
         <label>
-          Account
+          account
           <select
             value={accountId}
             disabled={offline}
