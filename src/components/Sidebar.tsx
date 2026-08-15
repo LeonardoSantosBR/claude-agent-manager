@@ -236,7 +236,7 @@ export function Sidebar(props: Props) {
 
       <input
         className="search"
-        placeholder="Filter sessions…"
+        placeholder="filter sessions…"
         value={filter}
         onChange={(event) => setFilter(event.target.value)}
       />
