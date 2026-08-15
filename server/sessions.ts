@@ -65,10 +65,15 @@ export class SessionManager extends EventEmitter {
     }
   }
 
+  /**
+   * Creation order, oldest first — same rule as listGroups(). Sorting by
+   * lastActivityAt would make the sidebar reshuffle itself on every chunk of
+   * output, so a session you're watching keeps moving under the cursor.
+   */
   list(): SessionMeta[] {
     return [...this.sessions.values()]
       .map((s) => s.meta)
-      .sort((a, b) => b.lastActivityAt - a.lastActivityAt)
+      .sort((a, b) => a.createdAt - b.createdAt)
   }
 
   listGroups(): Group[] {
