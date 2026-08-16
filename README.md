@@ -1,5 +1,8 @@
 # Claude Agent Manager
 
+<img width="1006" height="394" alt="image" src="https://github.com/user-attachments/assets/1acb19fd-c47e-4011-a39a-254dbf848e2f" />
+
+
 One panel to drive several Claude Code agents at once: a sidebar with sessions
 organized into groups, each agent's real terminal in the main area, and the
 logged-in Claude account at the bottom.
