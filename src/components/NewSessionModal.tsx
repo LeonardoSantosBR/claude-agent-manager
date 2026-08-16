@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { Account, CreateSessionBody, Group } from '../../shared/types.ts'
+import type { AuthStatus, CreateSessionBody, Group } from '../../shared/types.ts'
 import { api } from '../api.ts'
 
 const NEW_GROUP = '__new__'
 
 interface Props {
-  accounts: Account[]
+  auth: AuthStatus
   groups: Group[]
-  defaultAccountId: string
   defaultGroupId: string | null
   knownPaths: string[]
   onClose: () => void
@@ -18,7 +17,6 @@ export function NewSessionModal(props: Props) {
   const initialGroup = props.groups.find((g) => g.id === props.defaultGroupId)
   const [name, setName] = useState('')
   const [cwd, setCwd] = useState(initialGroup?.cwd ?? '')
-  const [accountId, setAccountId] = useState(props.defaultAccountId)
   const [groupId, setGroupId] = useState<string>(props.defaultGroupId ?? '')
   const [newGroupName, setNewGroupName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -32,8 +30,6 @@ export function NewSessionModal(props: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [props])
-
-  const account = props.accounts.find((a) => a.id === accountId)
 
   const browse = async () => {
     setPicking(true)
@@ -62,7 +58,6 @@ export function NewSessionModal(props: Props) {
       await props.onCreate({
         name,
         cwd,
-        accountId,
         groupId: groupId && groupId !== NEW_GROUP ? groupId : null,
         newGroupName: groupId === NEW_GROUP ? newGroupName : undefined,
       })
@@ -73,7 +68,9 @@ export function NewSessionModal(props: Props) {
     }
   }
 
-  const offline = props.accounts.length === 0
+  // configDir only ever comes from the server, so an empty one means we never
+  // reached it — creating a session would fail anyway.
+  const offline = !props.auth.configDir
 
   return (
     <div className="modal-backdrop" onClick={props.onClose}>
@@ -142,32 +139,15 @@ export function NewSessionModal(props: Props) {
           </datalist>
         </label>
 
-        <label>
-          Account
-          <select
-            value={accountId}
-            disabled={offline}
-            onChange={(event) => setAccountId(event.target.value)}
-          >
-            {props.accounts.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-                {item.loggedIn ? '' : ' (not logged in)'}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {offline && (
-          <p className="modal-error">
-            Can't reach the server, so I don't know which accounts exist. Check the
-            terminal running <code>npm run dev</code>.
+        {!props.auth.loggedIn && (
+          <p className="modal-warn">
+            Not logged in yet — the agent will open on Claude Code's authentication
+            screen. Use <strong>Log in</strong> at the bottom of the sidebar first.
           </p>
         )}
-        {account && !account.loggedIn && (
-          <p className="modal-warn">
-            This account isn't logged in yet — the agent will open on Claude Code's
-            authentication screen.
+        {offline && (
+          <p className="modal-error">
+            Can't reach the server. Check the terminal running <code>npm run dev</code>.
           </p>
         )}
         {error && <p className="modal-error">{error}</p>}

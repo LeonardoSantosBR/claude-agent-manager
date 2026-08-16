@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { CreateSessionBody, HistorySession } from '../shared/types.ts'
 import { api } from './api.ts'
+import { LoginModal } from './components/LoginModal.tsx'
 import { NewSessionModal } from './components/NewSessionModal.tsx'
 import { Sidebar } from './components/Sidebar.tsx'
 import { TerminalPane } from './components/TerminalPane.tsx'
@@ -9,9 +10,9 @@ import { shortPath } from './utils.ts'
 import './App.css'
 
 function App() {
-  const { sessions, groups, accounts, history, connected, refreshHistory } = useManager()
+  const { sessions, groups, auth, history, connected, refreshHistory, refreshAuth } = useManager()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [preferredAccount, setPreferredAccount] = useState<string | null>(null)
+  const [loggingIn, setLoggingIn] = useState(false)
   // Group the modal opens with: undefined = closed.
   const [modalGroup, setModalGroup] = useState<string | null | undefined>(undefined)
   // Panes already opened in this browser tab — they stay mounted to preserve
@@ -22,12 +23,7 @@ function App() {
   // pane goes with it — no cleanup effect needed.
   const activeSession = sessions.find((s) => s.id === selectedId) ?? null
   const activeId = activeSession?.id ?? null
-  const activeAccount = accounts.find((a) => a.id === activeSession?.accountId)
   const activeGroup = groups.find((g) => g.id === activeSession?.groupId)
-  const accountId =
-    preferredAccount && accounts.some((a) => a.id === preferredAccount)
-      ? preferredAccount
-      : (accounts[0]?.id ?? 'personal')
   const mounted = opened.filter((id) => sessions.some((s) => s.id === id))
 
   const open = useCallback((id: string) => {
@@ -53,7 +49,6 @@ function App() {
     const group = groups.find((candidate) => candidate.cwd === entry.cwd)
     const session = await api.create({
       cwd: entry.cwd,
-      accountId: entry.accountId,
       resumeId: entry.id,
       groupId: group?.id ?? null,
       name: entry.preview.slice(0, 40) || entry.project,
@@ -66,10 +61,9 @@ function App() {
       <Sidebar
         sessions={sessions}
         groups={groups}
-        accounts={accounts}
+        auth={auth}
         history={history}
         activeId={activeId}
-        activeAccountId={accountId}
         connected={connected}
         onSelect={open}
         onNew={(groupId) => setModalGroup(groupId)}
@@ -78,7 +72,8 @@ function App() {
         onStop={(id) => void api.stop(id)}
         onRestart={(id) => void api.restart(id)}
         onRemove={(id) => void api.remove(id)}
-        onAccountChange={setPreferredAccount}
+        onLogin={() => setLoggingIn(true)}
+        onLogout={() => void api.logout().then(() => void refreshAuth())}
         onCreateGroup={(name) => void api.createGroup(name)}
         onRenameGroup={(id, name) => void api.updateGroup(id, { name })}
         onRemoveGroup={(id) => void api.removeGroup(id)}
@@ -99,12 +94,6 @@ function App() {
             </div>
             <div className="stage-meta">
               {activeSession.resumed && <span className="chip">resumed</span>}
-              <span
-                className="chip account"
-                style={{ '--chip': activeAccount?.color ?? '#777' } as React.CSSProperties}
-              >
-                {activeAccount?.label ?? activeSession.accountId}
-              </span>
               {activeSession.status === 'stopped' ? (
                 <button type="button" onClick={() => void api.restart(activeSession.id)}>
                   Resume
@@ -162,14 +151,17 @@ function App() {
 
       {modalGroup !== undefined && (
         <NewSessionModal
-          accounts={accounts}
+          auth={auth}
           groups={groups}
-          defaultAccountId={accountId}
           defaultGroupId={modalGroup}
           knownPaths={knownPaths}
           onClose={() => setModalGroup(undefined)}
           onCreate={create}
         />
+      )}
+
+      {loggingIn && (
+        <LoginModal onClose={() => setLoggingIn(false)} onDone={() => void refreshAuth()} />
       )}
     </div>
   )

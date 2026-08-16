@@ -1,8 +1,8 @@
 # Claude Agent Manager
 
 One panel to drive several Claude Code agents at once: a sidebar with sessions
-organized into groups, each agent's real terminal in the main area, and a switch
-between Pro accounts (personal / work).
+organized into groups, each agent's real terminal in the main area, and the
+logged-in Claude account at the bottom.
 
 ```
 npm install
@@ -36,7 +36,7 @@ browser (xterm.js) ──ws──▶ server/sessions.ts ──node-pty──▶ 
   session dropped inside — the next ones come prefilled. Sessions can be dragged
   between groups, and deleting a group does **not** delete its sessions: they
   fall back to "No group".
-- Nicknames, group, folder and account for each session live in
+- Nicknames, group and folder for each session live in
   `~/.config/claude-agent-manager/state.json` (override with
   `AGENT_MANAGER_STATE_DIR`). If the server goes down, sessions come back listed
   as stopped and the ▸ button resumes each one where it left off.
@@ -62,49 +62,32 @@ browser (xterm.js) ──ws──▶ server/sessions.ts ──node-pty──▶ 
   PTY, so there's no VSCode integration by default; `/ide` inside a session
   connects it to a running editor window. Session-scoped `CLAUDE_CODE_*`
   variables from the parent shell are stripped before spawning
-  (`INHERITED_SESSION_VARS` in [server/sessions.ts](server/sessions.ts)),
+  (`INHERITED_SESSION_VARS` in [server/config.ts](server/config.ts)),
   otherwise agents launched from a Claude-owned terminal inherit another
   session's identity.
 - The **History** tab reads `<config-dir>/projects/*/<uuid>.jsonl` — the history
   Claude Code writes itself. Clicking an entry resumes that conversation.
 
-## The two accounts
+## The account
 
-Accounts live in `~/.config/claude-agent-manager/accounts.json`, created on first
-boot:
+There is one login: the machine's own. The manager drives `~/.claude` and never
+sets `CLAUDE_CONFIG_DIR` — with `CLAUDE_CONFIG_DIR=~/.claude`, Claude Code starts
+looking for `.claude.json` *inside* `~/.claude/` instead of `~/.claude.json` and
+comes up as a first run, without MCP servers or project trust. Leaving it unset
+is what makes an agent opened here identical to a `claude` typed in a terminal.
 
-```json
-[
-  { "id": "personal", "label": "Personal", "configDir": "~/.claude",      "color": "#FF6C37" },
-  { "id": "work",     "label": "Work",     "configDir": "~/.claude-work", "color": "#4EA1FF" }
-]
-```
+The sidebar footer shows who that is — the email (and organization) from
+`~/.claude.json`'s `oauthAccount`, shown only while `.credentials.json` exists.
 
-Each session is born with `CLAUDE_CONFIG_DIR` pointing at the chosen account's
-dir — and each dir has its own `.credentials.json`. You can have a personal
-session and a work session running side by side, no logout/login dance.
-
-To log in the second account, once:
-
-```bash
-CLAUDE_CONFIG_DIR=~/.claude-work claude   # then: /login
-```
-
-The sidebar shows a `!` on an account that isn't logged in.
-
-**Important detail:** the account whose `configDir` is `~/.claude` runs *without*
-the variable set. With `CLAUDE_CONFIG_DIR=~/.claude`, Claude Code starts looking
-for `.claude.json` inside `~/.claude/` instead of `~/.claude.json`, and the
-session comes up as a first run — no MCP servers, no project trust. See
-`isDefaultConfigDir()` in [server/config.ts](server/config.ts).
-
-Because the config dir is separate, `settings.json`, skills and plugins are
-**not** shared between accounts. To mirror them, symlink:
-
-```bash
-ln -s ~/.claude/settings.json ~/.claude-work/settings.json
-ln -s ~/.claude/skills        ~/.claude-work/skills
-```
+- **Log in** runs `claude` in a hidden PTY, presses Enter past the theme and
+  login-method menus, scrapes the OAuth URL it prints and opens it in the browser
+  you already have the manager open in. Paste the code the browser gives back and
+  the same waiting CLI receives it. The URL is also shown as a link, for when the
+  pop-up blocker gets in the way. See [server/auth.ts](server/auth.ts).
+- **Log out** deletes `~/.claude/.credentials.json` — the same thing `/logout`
+  does inside Claude Code.
+- Logging in from any terminal works just as well: the footer re-reads the files
+  on every poll of `/api/auth`.
 
 ## Scripts
 
@@ -119,10 +102,10 @@ ln -s ~/.claude/skills        ~/.claude-work/skills
 
 ```
 server/     sessions.ts (PTY + state)   history.ts (scans the .jsonl files)
-            config.ts (accounts, binary) picker.ts (native folder dialog)
-            index.ts (REST + websocket)
+            config.ts (paths, env)      picker.ts (native folder dialog)
+            auth.ts (login flow)        index.ts (REST + websocket)
 shared/     types.ts shared by both sides
-src/        App.tsx, Sidebar, TerminalPane (xterm), NewSessionModal
+src/        App.tsx, Sidebar, TerminalPane (xterm), NewSessionModal, LoginModal
 ```
 
 Palette: background `#3c3c3c`, accent `#FF6C37`.

@@ -1,32 +1,21 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import type { Account } from '../shared/types.ts'
+import type { AccountIdentity, AuthStatus } from '../shared/types.ts'
 import { which } from './which.ts'
 
 export const PORT = Number(process.env.PORT ?? 5174)
 
 /**
- * Where we keep our own state (nicknames, groups, accounts).
+ * Where we keep our own state (nicknames, groups).
  * Overridable so a test instance can run without touching the real one.
  */
 export const STATE_DIR =
   process.env.AGENT_MANAGER_STATE_DIR ?? join(homedir(), '.config', 'claude-agent-manager')
 export const STATE_FILE = join(STATE_DIR, 'state.json')
-export const ACCOUNTS_FILE = join(STATE_DIR, 'accounts.json')
 
 export function expandHome(p: string): string {
   return p.startsWith('~') ? join(homedir(), p.slice(1)) : resolve(p)
-}
-
-/**
- * `~/.claude` is the default config dir — but with CLAUDE_CONFIG_DIR set, Claude
- * Code starts looking for .claude.json *inside* it instead of at ~/.claude.json.
- * Setting the variable to that path is not a no-op: it drops MCP servers, project
- * trust and friends. So for the default account we simply don't set it.
- */
-export function isDefaultConfigDir(dir: string): boolean {
-  return expandHome(dir) === join(homedir(), '.claude')
 }
 
 /**
@@ -36,40 +25,88 @@ export function isDefaultConfigDir(dir: string): boolean {
  */
 export const CLAUDE_BIN = process.env.CLAUDE_BIN ?? which('claude') ?? 'claude'
 
-const DEFAULT_ACCOUNTS: Omit<Account, 'loggedIn'>[] = [
-  { id: 'personal', label: 'Personal', configDir: '~/.claude', color: '#FF6C37' },
-  { id: 'work', label: 'Work', configDir: '~/.claude-work', color: '#4EA1FF' },
-]
+/**
+ * The one config dir the manager drives: Claude Code's default. We deliberately
+ * never set CLAUDE_CONFIG_DIR — pointing it at ~/.claude is *not* a no-op (Claude
+ * then looks for .claude.json inside the dir and loses MCP servers, project trust
+ * and friends). Leaving it unset is what makes an agent spawned here identical to
+ * a `claude` typed in a terminal.
+ */
+export const CONFIG_DIR = join(homedir(), '.claude')
+/** The OAuth tokens. Its existence is what "logged in" means. */
+export const CREDENTIALS_FILE = join(CONFIG_DIR, '.credentials.json')
+/** Config lives *next to* the dir, not inside it — because the var is unset. */
+export const CONFIG_JSON = join(homedir(), '.claude.json')
 
-function ensureStateDir() {
+export function ensureStateDir() {
   if (!existsSync(STATE_DIR)) mkdirSync(STATE_DIR, { recursive: true })
 }
 
-export function loadAccounts(): Account[] {
-  ensureStateDir()
-  if (!existsSync(ACCOUNTS_FILE)) {
-    writeFileSync(ACCOUNTS_FILE, JSON.stringify(DEFAULT_ACCOUNTS, null, 2))
+/**
+ * Variables a running Claude Code injects into its own child processes. They
+ * describe *that* session, so they must never reach a process we spawn: started
+ * from a terminal that already belongs to a Claude session (a VSCode integrated
+ * terminal, say), every agent here would come up believing it is that session's
+ * child — pointing at a messaging socket and an IDE port that aren't its own.
+ * Anything else (including the user's own CLAUDE_CODE_* flags) passes through.
+ */
+const INHERITED_SESSION_VARS = [
+  'CLAUDECODE',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_CODE_SSE_PORT',
+]
+
+/** Environment for every claude we spawn — agents and the login flow alike. */
+export function claudeEnv(): Record<string, string> {
+  const env: Record<string, string> = {
+    ...(process.env as Record<string, string>),
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    FORCE_COLOR: '3',
   }
-  let raw: Omit<Account, 'loggedIn'>[]
+  for (const leaked of INHERITED_SESSION_VARS) delete env[leaked]
+  // See CONFIG_DIR: the default dir runs with the variable unset.
+  delete env.CLAUDE_CONFIG_DIR
+  return env
+}
+
+/**
+ * Which Claude account this machine is signed into, read from .claude.json.
+ * `.credentials.json` only tells us that *some* login happened; this is what
+ * puts a name on it.
+ */
+function readIdentity(): AccountIdentity | null {
+  if (!existsSync(CONFIG_JSON)) return null
   try {
-    raw = JSON.parse(readFileSync(ACCOUNTS_FILE, 'utf8'))
-  } catch {
-    raw = DEFAULT_ACCOUNTS
-  }
-  return raw.map((a) => {
-    const dir = expandHome(a.configDir)
-    return {
-      ...a,
-      configDir: dir,
-      // No Linux o Claude Code guarda o OAuth em .credentials.json dentro do config dir.
-      loggedIn: existsSync(join(dir, '.credentials.json')),
+    // JSON.parse tolerates the duplicate project keys this file accumulates
+    // (same path in different letter case) — a stricter parser would throw.
+    const parsed = JSON.parse(readFileSync(CONFIG_JSON, 'utf8')) as {
+      oauthAccount?: { emailAddress?: string; organizationName?: string; accountUuid?: string }
     }
-  })
+    const account = parsed.oauthAccount
+    if (!account?.accountUuid) return null
+    return {
+      email: account.emailAddress ?? '',
+      organization: account.organizationName ?? null,
+      uuid: account.accountUuid,
+    }
+  } catch {
+    // Unreadable or malformed: treat as unknown rather than taking the server down.
+    return null
+  }
 }
 
-export function saveAccounts(accounts: Omit<Account, 'loggedIn'>[]) {
-  ensureStateDir()
-  writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2))
+export function readAuth(): AuthStatus {
+  const loggedIn = existsSync(CREDENTIALS_FILE)
+  return {
+    loggedIn,
+    // A stale oauthAccount survives a logout, so only trust it while logged in.
+    identity: loggedIn ? readIdentity() : null,
+    configDir: CONFIG_DIR,
+  }
 }
-
-export { ensureStateDir }

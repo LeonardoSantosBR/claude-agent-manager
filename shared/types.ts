@@ -1,13 +1,39 @@
 /** Types shared between the server (node) and the front end (vite/react). */
 
-export interface Account {
-  id: string
-  label: string
-  /** Directory passed as CLAUDE_CONFIG_DIR when spawning the agent. */
-  configDir: string
-  color: string
-  /** Computed by the server: does .credentials.json exist in that configDir? */
+/**
+ * Who the machine's Claude Code is signed in as. There is a single login: the
+ * manager drives `~/.claude` and never sets CLAUDE_CONFIG_DIR, so an agent it
+ * spawns is on exactly the same account as a `claude` typed in a terminal.
+ */
+export interface AuthStatus {
+  /** does .credentials.json exist in the config dir? */
   loggedIn: boolean
+  /** Read from .claude.json — null when logged out, or on an API-key login. */
+  identity: AccountIdentity | null
+  configDir: string
+}
+
+export interface AccountIdentity {
+  email: string
+  /** null on a personal (non-org) account. */
+  organization: string | null
+  /** Claude's own account id. */
+  uuid: string
+}
+
+export type LoginPhase = 'idle' | 'starting' | 'url' | 'done' | 'error'
+
+/**
+ * State of the login the server drives for us: it runs `claude`, walks past the
+ * first menus and scrapes the OAuth URL, which the browser then opens.
+ */
+export interface LoginState {
+  phase: LoginPhase
+  /** OAuth URL to open in the browser. Set once phase is 'url'. */
+  url: string | null
+  /** Tail of the CLI output, ANSI stripped — what to show when it goes wrong. */
+  output: string
+  error: string | null
 }
 
 /**
@@ -34,7 +60,6 @@ export interface SessionMeta {
   project: string
   /** null = loose, shows up under "No group". */
   groupId: string | null
-  accountId: string
   status: SessionStatus
   createdAt: number
   lastActivityAt: number
@@ -47,7 +72,6 @@ export interface HistorySession {
   id: string
   cwd: string
   project: string
-  accountId: string
   preview: string
   updatedAt: number
   /** already open as a live session in the manager? */
@@ -57,7 +81,6 @@ export interface HistorySession {
 export interface CreateSessionBody {
   name?: string
   cwd: string
-  accountId: string
   groupId?: string | null
   /** creates the group on the spot and drops the session into it. */
   newGroupName?: string

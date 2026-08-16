@@ -8,7 +8,7 @@ export interface PersistedState {
 }
 
 /**
- * Persists metadata only (nickname, folder, account, group). PTYs die with the
+ * Persists metadata only (nickname, folder, group). PTYs die with the
  * server, so everything that was running comes back as 'stopped' — and can be
  * revived with --resume, since the id *is* Claude's own session id.
  */

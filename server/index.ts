@@ -2,7 +2,8 @@ import { createServer, type IncomingMessage } from 'node:http'
 import express from 'express'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMessage, Group, ServerMessage, SessionMeta } from '../shared/types.ts'
-import { CLAUDE_BIN, loadAccounts, PORT } from './config.ts'
+import { cancelLogin, loginState, logout, startLogin, submitCode } from './auth.ts'
+import { CLAUDE_BIN, CONFIG_DIR, PORT, readAuth } from './config.ts'
 import { listHistory } from './history.ts'
 import { PickerError, pickerName, pickFolder } from './picker.ts'
 import { SessionManager } from './sessions.ts'
@@ -11,12 +12,33 @@ import { flushState } from './store.ts'
 const app = express()
 app.use(express.json())
 
-let accounts = loadAccounts()
-const manager = new SessionManager(() => accounts)
+const manager = new SessionManager()
 
-app.get('/api/accounts', (_req, res) => {
-  accounts = loadAccounts() // re-read to pick up a login done after boot
-  res.json(accounts)
+// Read from disk on every call: the login can happen outside the manager (a
+// `claude` in any terminal) and we want to notice it.
+app.get('/api/auth', (_req, res) => {
+  res.json(readAuth())
+})
+
+app.post('/api/auth/login', (_req, res) => {
+  res.json(startLogin())
+})
+
+app.get('/api/auth/login', (_req, res) => {
+  res.json(loginState())
+})
+
+app.post('/api/auth/login/code', (req, res) => {
+  res.json(submitCode(String(req.body?.code ?? '')))
+})
+
+app.post('/api/auth/login/cancel', (_req, res) => {
+  cancelLogin()
+  res.json(loginState())
+})
+
+app.post('/api/auth/logout', (_req, res) => {
+  res.json(logout())
 })
 
 app.get('/api/sessions', (_req, res) => {
@@ -101,7 +123,7 @@ app.post('/api/pick-folder', async (req, res) => {
 
 app.get('/api/history', async (_req, res) => {
   const openIds = new Set(manager.list().map((s) => s.id))
-  res.json(await listHistory(accounts, openIds))
+  res.json(await listHistory(CONFIG_DIR, openIds))
 })
 
 const server = createServer(app)
@@ -135,6 +157,11 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage, params: URLSearchPar
     ws.on('close', () => manager.off('state', push))
     return
   }
+
+  // Before the replay, so the PTY is already at the pane's size when it repaints.
+  const cols = Number(params.get('cols'))
+  const rows = Number(params.get('rows'))
+  if (cols > 0 && rows > 0) manager.resize(sessionId, cols, rows)
 
   let detach: (() => void) | null = null
   try {
@@ -177,6 +204,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     if (shuttingDown) return
     shuttingDown = true
     manager.shutdown()
+    cancelLogin()
     flushState()
     process.exit(0)
   })
@@ -198,8 +226,7 @@ server.listen(PORT, () => {
     `[agent-manager] http://localhost:${PORT}  claude=${CLAUDE_BIN}  ` +
       `folder picker=${pickerName ?? 'unavailable'}`,
   )
-  for (const account of accounts) {
-    const state = account.loggedIn ? 'ok' : 'NOT LOGGED IN'
-    console.log(`  account ${account.id.padEnd(9)} ${account.configDir}  [${state}]`)
-  }
+  const auth = readAuth()
+  const who = auth.identity?.email ?? 'unknown account'
+  console.log(`  ${auth.configDir}  [${auth.loggedIn ? who : 'NOT LOGGED IN'}]`)
 })

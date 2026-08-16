@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
-  Account,
+  AuthStatus,
   Group,
   HistorySession,
   ServerMessage,
@@ -9,16 +9,18 @@ import type {
 import { api } from '../api.ts'
 import { closeSocket, wsUrl } from '../ws.ts'
 
+const LOGGED_OUT: AuthStatus = { loggedIn: false, identity: null, configDir: '' }
+
 /**
  * Global manager state. Sessions and groups arrive over the websocket (the
- * server pushes on every change); accounts and history are fetched over HTTP —
- * and refetched whenever the websocket (re)connects, otherwise a server that was
- * down at load time would leave those lists empty forever.
+ * server pushes on every change); the login status and the history are fetched
+ * over HTTP — and refetched whenever the websocket (re)connects, otherwise a
+ * server that was down at load time would leave those empty forever.
  */
 export function useManager() {
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [groups, setGroups] = useState<Group[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
+  const [auth, setAuth] = useState<AuthStatus>(LOGGED_OUT)
   const [history, setHistory] = useState<HistorySession[]>([])
   const [connected, setConnected] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
@@ -31,9 +33,9 @@ export function useManager() {
     }
   }, [])
 
-  const refreshAccounts = useCallback(async () => {
+  const refreshAuth = useCallback(async () => {
     try {
-      setAccounts(await api.accounts())
+      setAuth(await api.auth())
     } catch {
       /* same */
     }
@@ -50,10 +52,10 @@ export function useManager() {
 
       socket.onopen = () => {
         setConnected(true)
-        Promise.all([api.accounts(), api.history()])
-          .then(([nextAccounts, nextHistory]) => {
+        Promise.all([api.auth(), api.history()])
+          .then(([nextAuth, nextHistory]) => {
             if (closed) return
-            setAccounts(nextAccounts)
+            setAuth(nextAuth)
             setHistory(nextHistory)
           })
           .catch(() => {
@@ -81,5 +83,5 @@ export function useManager() {
     }
   }, [])
 
-  return { sessions, groups, accounts, history, connected, refreshHistory, refreshAccounts }
+  return { sessions, groups, auth, history, connected, refreshHistory, refreshAuth }
 }

@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { open, readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { Account, HistorySession } from '../shared/types.ts'
+import type { HistorySession } from '../shared/types.ts'
 
 /**
  * Does Claude have a conversation on file for this session id?
@@ -25,7 +25,7 @@ export function hasSessionHistory(configDir: string, id: string): boolean {
 
 /** We only read the head of each .jsonl — files easily pass 500KB. */
 const HEAD_BYTES = 128 * 1024
-const MAX_PER_ACCOUNT = 300
+const MAX_FILES = 300
 
 interface Peek {
   cwd: string | null
@@ -82,67 +82,63 @@ async function peek(file: string): Promise<Peek> {
  * history — Claude Code itself writes there.
  */
 export async function listHistory(
-  accounts: Account[],
+  configDir: string,
   openIds: Set<string>,
 ): Promise<HistorySession[]> {
   const out: HistorySession[] = []
+  const root = join(configDir, 'projects')
+  let dirs: string[]
+  try {
+    dirs = await readdir(root)
+  } catch {
+    return out // nothing run on this machine yet
+  }
 
-  for (const account of accounts) {
-    const root = join(account.configDir, 'projects')
-    let dirs: string[]
+  const files: { path: string; mtime: number }[] = []
+  for (const dir of dirs) {
+    let entries: string[]
     try {
-      dirs = await readdir(root)
+      entries = await readdir(join(root, dir))
     } catch {
-      continue // account not used yet
+      continue
     }
-
-    const files: { path: string; mtime: number }[] = []
-    for (const dir of dirs) {
-      let entries: string[]
+    for (const entry of entries) {
+      if (!entry.endsWith('.jsonl')) continue
+      const path = join(root, dir, entry)
       try {
-        entries = await readdir(join(root, dir))
+        const info = await stat(path)
+        if (info.size > 0) files.push({ path, mtime: info.mtimeMs })
       } catch {
-        continue
-      }
-      for (const entry of entries) {
-        if (!entry.endsWith('.jsonl')) continue
-        const path = join(root, dir, entry)
-        try {
-          const info = await stat(path)
-          if (info.size > 0) files.push({ path, mtime: info.mtimeMs })
-        } catch {
-          /* vanished mid-scan */
-        }
+        /* vanished mid-scan */
       }
     }
+  }
 
-    files.sort((a, b) => b.mtime - a.mtime)
-    const recent = files.slice(0, MAX_PER_ACCOUNT)
+  files.sort((a, b) => b.mtime - a.mtime)
+  const recent = files.slice(0, MAX_FILES)
 
-    const peeked = await Promise.all(
-      recent.map(async (file) => {
-        try {
-          return { file, info: await peek(file.path) }
-        } catch {
-          return { file, info: { cwd: null, preview: '' } as Peek }
-        }
-      }),
-    )
+  const peeked = await Promise.all(
+    recent.map(async (file) => {
+      try {
+        return { file, info: await peek(file.path) }
+      } catch {
+        return { file, info: { cwd: null, preview: '' } as Peek }
+      }
+    }),
+  )
 
-    for (const { file, info } of peeked) {
-      const id = basename(file.path, '.jsonl')
-      const cwd = info.cwd ?? ''
-      if (!cwd) continue
-      out.push({
-        id,
-        cwd,
-        project: basename(cwd),
-        accountId: account.id,
-        preview: info.preview,
-        updatedAt: file.mtime,
-        open: openIds.has(id),
-      })
-    }
+  for (const { file, info } of peeked) {
+    const id = basename(file.path, '.jsonl')
+    const cwd = info.cwd ?? ''
+    if (!cwd) continue
+    out.push({
+      id,
+      cwd,
+      project: basename(cwd),
+      preview: info.preview,
+      updatedAt: file.mtime,
+      open: openIds.has(id),
+    })
   }
 
   return out.sort((a, b) => b.updatedAt - a.updatedAt)

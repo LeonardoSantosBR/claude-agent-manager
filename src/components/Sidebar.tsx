@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react'
-import type { Account, Group, HistorySession, SessionMeta } from '../../shared/types.ts'
+import type { AuthStatus, Group, HistorySession, SessionMeta } from '../../shared/types.ts'
 import { timeAgo } from '../utils.ts'
 
 interface Props {
   sessions: SessionMeta[]
   groups: Group[]
-  accounts: Account[]
+  auth: AuthStatus
   history: HistorySession[]
   activeId: string | null
-  activeAccountId: string
   connected: boolean
   onSelect: (id: string) => void
   onNew: (groupId: string | null) => void
@@ -17,7 +16,8 @@ interface Props {
   onStop: (id: string) => void
   onRestart: (id: string) => void
   onRemove: (id: string) => void
-  onAccountChange: (id: string) => void
+  onLogin: () => void
+  onLogout: () => void
   onCreateGroup: (name: string) => void
   onRenameGroup: (id: string, name: string) => void
   onRemoveGroup: (id: string) => void
@@ -35,7 +35,6 @@ export function Sidebar(props: Props) {
   const [newGroup, setNewGroup] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<string | null>(null)
 
-  const activeAccount = props.accounts.find((a) => a.id === props.activeAccountId)
   const needle = filter.trim().toLowerCase()
 
   const matches = (session: SessionMeta) =>
@@ -97,7 +96,6 @@ export function Sidebar(props: Props) {
   })
 
   const renderSession = (session: SessionMeta) => {
-    const account = props.accounts.find((a) => a.id === session.accountId)
     return (
       <div
         key={session.id}
@@ -139,11 +137,6 @@ export function Sidebar(props: Props) {
             {session.name}
           </span>
         )}
-        <span
-          className="account-tag"
-          style={{ background: account?.color ?? '#777' }}
-          title={account?.label}
-        />
         <span className="row-actions">
           {session.status === 'running' ? (
             <button
@@ -191,28 +184,10 @@ export function Sidebar(props: Props) {
           Agent Manager
         </div>
 
-        <div className="accounts" role="group" aria-label="Active account">
-          {props.accounts.map((account) => (
-            <button
-              key={account.id}
-              type="button"
-              className={`account-pill ${account.id === props.activeAccountId ? 'selected' : ''}`}
-              style={{ '--pill': account.color } as React.CSSProperties}
-              onClick={() => props.onAccountChange(account.id)}
-              title={account.configDir}
-            >
-              <span className="pill-dot" />
-              {account.label}
-              {!account.loggedIn && <span className="pill-warn">!</span>}
-            </button>
-          ))}
-        </div>
-
-        {activeAccount && !activeAccount.loggedIn && (
+        {!props.auth.loggedIn && (
           <p className="login-hint">
-            Not logged in on this account. Run once in a terminal:
-            <code>CLAUDE_CONFIG_DIR={activeAccount.configDir} claude</code>then{' '}
-            <code>/login</code>.
+            Not logged in — sessions would open on Claude Code's auth screen. Use{' '}
+            <strong>Log in</strong> at the bottom.
           </p>
         )}
       </header>
@@ -374,31 +349,51 @@ export function Sidebar(props: Props) {
                   <span className="group-name">{project}</span>
                   <span className="count">{entries.length}</span>
                 </h2>
-                {entries.map((entry) => {
-                  const account = props.accounts.find((a) => a.id === entry.accountId)
-                  return (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      className="row history"
-                      onClick={() => props.onResume(entry)}
-                      title={`${entry.cwd}\nResume with --resume`}
-                    >
-                      <span
-                        className="account-tag"
-                        style={{ background: account?.color ?? '#777' }}
-                      />
-                      <span className="history-body">
-                        <span className="row-name">{entry.preview || '(no prompt)'}</span>
-                        <span className="row-sub">{timeAgo(entry.updatedAt)}</span>
-                      </span>
-                    </button>
-                  )
-                })}
+                {entries.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="row history"
+                    onClick={() => props.onResume(entry)}
+                    title={`${entry.cwd}\nResume with --resume`}
+                  >
+                    <span className="history-body">
+                      <span className="row-name">{entry.preview || '(no prompt)'}</span>
+                      <span className="row-sub">{timeAgo(entry.updatedAt)}</span>
+                    </span>
+                  </button>
+                ))}
               </section>
             ))
           ))}
       </div>
+
+      <footer className="account-bar" title={props.auth.configDir}>
+        {props.auth.loggedIn ? (
+          <>
+            <span className="account-who">
+              <span className="account-email">
+                {props.auth.identity?.email ?? 'logged in'}
+              </span>
+              {props.auth.identity?.organization && (
+                <span className="account-org">{props.auth.identity.organization}</span>
+              )}
+            </span>
+            <button type="button" className="account-action" onClick={props.onLogout}>
+              Log out
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="account-who">
+              <span className="account-email muted">Not logged in</span>
+            </span>
+            <button type="button" className="account-action primary" onClick={props.onLogin}>
+              Log in
+            </button>
+          </>
+        )}
+      </footer>
     </aside>
   )
 }

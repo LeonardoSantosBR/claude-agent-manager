@@ -4,31 +4,14 @@ import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 import pty from 'node-pty'
 import type { IPty } from 'node-pty'
-import type { Account, CreateSessionBody, Group, SessionMeta } from '../shared/types.ts'
-import { CLAUDE_BIN, expandHome, isDefaultConfigDir } from './config.ts'
+import type { CreateSessionBody, Group, SessionMeta } from '../shared/types.ts'
+import { CLAUDE_BIN, claudeEnv, CONFIG_DIR, expandHome } from './config.ts'
 import { hasSessionHistory } from './history.ts'
 import { dropScrollback, flushScrollback, readScrollback, saveScrollback } from './scrollback.ts'
 import { loadState, saveState } from './store.ts'
 
 /** How much output we keep per session to replay when a client connects. */
 const SCROLLBACK_LIMIT = 512 * 1024
-
-/**
- * Variables a running Claude Code injects into its own child processes. They
- * describe *that* session, so they must never reach a session we spawn.
- * Anything else (including the user's own CLAUDE_CODE_* feature flags) passes
- * through untouched.
- */
-const INHERITED_SESSION_VARS = [
-  'CLAUDECODE',
-  'CLAUDE_CODE_SESSION_ID',
-  'CLAUDE_CODE_CHILD_SESSION',
-  'CLAUDE_CODE_ENTRYPOINT',
-  'CLAUDE_CODE_EXECPATH',
-  'CLAUDE_CODE_MESSAGING_SOCKET',
-  'CLAUDE_CODE_MESSAGING_TOKEN',
-  'CLAUDE_CODE_SSE_PORT',
-]
 
 interface LiveSession {
   meta: SessionMeta
@@ -45,11 +28,9 @@ interface LiveSession {
 export class SessionManager extends EventEmitter {
   private sessions = new Map<string, LiveSession>()
   private groups = new Map<string, Group>()
-  private getAccounts: () => Account[]
 
-  constructor(getAccounts: () => Account[]) {
+  constructor() {
     super()
-    this.getAccounts = getAccounts
     const state = loadState()
     for (const group of state.groups) this.groups.set(group.id, group)
     for (const meta of state.sessions) {
@@ -125,12 +106,6 @@ export class SessionManager extends EventEmitter {
     return this.sessions.get(id)
   }
 
-  private account(id: string): Account {
-    const found = this.getAccounts().find((a) => a.id === id)
-    if (!found) throw new Error(`unknown account: ${id}`)
-    return found
-  }
-
   private persist() {
     const state = { sessions: this.list(), groups: this.listGroups() }
     saveState(state)
@@ -140,7 +115,6 @@ export class SessionManager extends EventEmitter {
   create(body: CreateSessionBody): SessionMeta {
     const cwd = expandHome(body.cwd)
     if (!existsSync(cwd)) throw new Error(`folder does not exist: ${cwd}`)
-    const account = this.account(body.accountId)
 
     const group = body.newGroupName?.trim()
       ? this.createGroup(body.newGroupName, cwd)
@@ -167,7 +141,6 @@ export class SessionManager extends EventEmitter {
       cwd,
       project: basename(cwd),
       groupId: group?.id ?? null,
-      accountId: account.id,
       status: 'stopped',
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
@@ -203,43 +176,20 @@ export class SessionManager extends EventEmitter {
   }
 
   private spawn(session: LiveSession, resume: boolean) {
-    const account = this.account(session.meta.accountId)
     // A session that never exchanged a message has no .jsonl yet, and
     // `claude --resume` bails with "No conversation found" and exits. Fall back
     // to starting fresh under the same id, so the session keeps its identity.
-    const canResume = resume && hasSessionHistory(account.configDir, session.meta.id)
+    const canResume = resume && hasSessionHistory(CONFIG_DIR, session.meta.id)
     const args = canResume
       ? ['--resume', session.meta.id]
       : ['--session-id', session.meta.id]
-
-    const env: Record<string, string> = {
-      ...(process.env as Record<string, string>),
-      TERM: 'xterm-256color',
-      COLORTERM: 'truecolor',
-      FORCE_COLOR: '3',
-    }
-
-    // Started from a terminal that already belongs to a Claude session (a VSCode
-    // integrated terminal, say), the whole parent environment would be inherited
-    // and every agent here would come up believing it is that session's child —
-    // pointing at a messaging socket and an IDE port that aren't its own.
-    for (const leaked of INHERITED_SESSION_VARS) delete env[leaked]
-
-    // This is what separates the two Pro accounts: each config dir has its own
-    // .credentials.json. The default account runs without the variable — see
-    // isDefaultConfigDir().
-    if (isDefaultConfigDir(account.configDir)) {
-      delete env.CLAUDE_CONFIG_DIR
-    } else {
-      env.CLAUDE_CONFIG_DIR = account.configDir
-    }
 
     const proc = pty.spawn(CLAUDE_BIN, args, {
       name: 'xterm-256color',
       cwd: session.meta.cwd,
       cols: session.cols,
       rows: session.rows,
-      env,
+      env: claudeEnv(),
     })
 
     session.proc = proc
@@ -301,7 +251,15 @@ export class SessionManager extends EventEmitter {
   attach(id: string, listener: (chunk: string) => void): () => void {
     const session = this.sessions.get(id)
     if (!session) throw new Error('session not found')
-    if (session.buffer) listener(session.buffer)
+    if (session.buffer) {
+      listener(session.buffer)
+      // Those bytes were drawn at whatever width produced them, so the cursor
+      // can land a column off and the first keystroke shows up beside the
+      // prompt. A live session repaints on the nudge below, so hand it a clean
+      // viewport (2J keeps the scrollback above) and a cursor at the origin. A
+      // stopped one has nothing to repaint it, so its last screen stays.
+      if (session.proc) listener('\x1b[2J\x1b[H')
+    }
     session.listeners.add(listener)
     return () => session.listeners.delete(listener)
   }

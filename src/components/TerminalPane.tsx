@@ -62,10 +62,20 @@ export function TerminalPane({ sessionId, active }: Props) {
     term.loadAddon(fit)
     term.loadAddon(new WebLinksAddon())
     term.open(host)
+    try {
+      fit.fit()
+    } catch {
+      /* container has no size yet — onopen fits again */
+    }
     termRef.current = term
     fitRef.current = fit
 
-    const socket = new WebSocket(wsUrl(`/ws?session=${sessionId}`))
+    // The size travels in the URL so the server can resize the PTY *before*
+    // replaying: bytes drawn at another width land with the cursor a column off,
+    // and the next keystroke shows up beside the prompt instead of inside it.
+    const socket = new WebSocket(
+      wsUrl(`/ws?session=${sessionId}&cols=${term.cols}&rows=${term.rows}`),
+    )
     const send = (message: ClientMessage) => {
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
     }

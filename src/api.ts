@@ -1,8 +1,9 @@
 import type {
-  Account,
+  AuthStatus,
   CreateSessionBody,
   Group,
   HistorySession,
+  LoginState,
   SessionMeta,
 } from '../shared/types.ts'
 
@@ -19,7 +20,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  accounts: () => request<Account[]>('/accounts'),
+  auth: () => request<AuthStatus>('/auth'),
+  /** Starts the `claude` login and returns as soon as it is running. */
+  login: () => request<LoginState>('/auth/login', { method: 'POST' }),
+  loginState: () => request<LoginState>('/auth/login'),
+  loginCode: (code: string) =>
+    request<LoginState>('/auth/login/code', { method: 'POST', body: JSON.stringify({ code }) }),
+  loginCancel: () => request<LoginState>('/auth/login/cancel', { method: 'POST' }),
+  logout: () => request<AuthStatus>('/auth/logout', { method: 'POST' }),
   sessions: () => request<SessionMeta[]>('/sessions'),
   history: () => request<HistorySession[]>('/history'),
   create: (body: CreateSessionBody) =>
