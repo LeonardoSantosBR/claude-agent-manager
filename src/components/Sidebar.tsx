@@ -138,6 +138,17 @@ export function Sidebar(props: Props) {
           </span>
         )}
         <span className="row-actions">
+          <button
+            type="button"
+            title="Rename"
+            onClick={(event) => {
+              event.stopPropagation()
+              setDraft(session.name)
+              setEditing(session.id)
+            }}
+          >
+            ✎
+          </button>
           {session.status === 'running' ? (
             <button
               type="button"
