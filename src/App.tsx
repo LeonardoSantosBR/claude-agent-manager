@@ -108,7 +108,7 @@ function App() {
         ) : (
           <header className="stage-head">
             <div className="stage-title">
-              <h1>claude agent manager</h1>
+              <h1>claude manager</h1>
             </div>
           </header>
         )}

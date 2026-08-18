@@ -179,11 +179,6 @@ export function Sidebar(props: Props) {
   return (
     <aside className="sidebar">
       <header className="sidebar-head">
-        <div className="brand">
-          <span className={`link-dot ${props.connected ? 'on' : 'off'}`} />
-          Agent Manager
-        </div>
-
         {!props.auth.loggedIn && (
           <p className="login-hint">
             Not logged in — sessions would open on Claude Code's auth screen. Use{' '}
