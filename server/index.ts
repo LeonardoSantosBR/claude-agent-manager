@@ -163,13 +163,32 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage, params: URLSearchPar
   const rows = Number(params.get('rows'))
   if (cols > 0 && rows > 0) manager.resize(sessionId, cols, rows)
 
+  // The repaint that follows the nudge is what puts the cursor back where the
+  // PTY has it; until then the pane must not send keystrokes (see 'synced').
+  let awaitingRepaint = manager.get(sessionId)?.proc != null
+  const sync = () => {
+    if (!awaitingRepaint) return
+    awaitingRepaint = false
+    send(ws, { type: 'synced' })
+  }
+
+  // attach() hands over the replay synchronously — that's not the repaint.
+  let replaying = true
   let detach: (() => void) | null = null
   try {
-    detach = manager.attach(sessionId, (data) => send(ws, { type: 'data', data }))
+    detach = manager.attach(sessionId, (data) => {
+      send(ws, { type: 'data', data })
+      if (!replaying) sync()
+    })
+    replaying = false
   } catch {
     ws.close(4004, 'session not found')
     return
   }
+  // A stopped session has nothing to repaint, and a live one that stays silent
+  // shouldn't hold the keyboard hostage either.
+  if (!awaitingRepaint) send(ws, { type: 'synced' })
+  const syncFallback = setTimeout(sync, 1500)
 
   const onExit = (id: string, code: number | null) => {
     if (id === sessionId) send(ws, { type: 'exit', code })
@@ -188,6 +207,7 @@ wss.on('connection', (ws: WebSocket, _req: IncomingMessage, params: URLSearchPar
   })
 
   ws.on('close', () => {
+    clearTimeout(syncFallback)
     detach?.()
     manager.off('exit', onExit)
   })

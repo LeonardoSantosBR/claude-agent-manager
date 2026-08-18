@@ -62,6 +62,12 @@ class LoginFlow {
         cols: COLS,
         rows: ROWS,
         env: claudeEnv(),
+        // Killing a ConPTY whose process already exited makes node-pty launch
+        // conpty_console_list_agent.js, which dies with "AttachConsole failed"
+        // and spews a stack trace over the server log. This flow always races
+        // that way — the wizard exits on its own right as we clean up — so it
+        // runs on winpty, where the kill has no console agent to attach to.
+        useConpty: false,
       })
     } catch (failure) {
       this.error = `could not run ${CLAUDE_BIN}: ${(failure as Error).message}`

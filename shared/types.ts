@@ -98,3 +98,11 @@ export type ServerMessage =
   | { type: 'data'; data: string }
   | { type: 'exit'; code: number | null }
   | { type: 'state'; sessions: SessionMeta[]; groups: Group[] }
+  /**
+   * The replayed screen has been repainted by the agent, so the cursor the
+   * client sees is the cursor the PTY has. Claude echoes a typed character as a
+   * bare byte at wherever the cursor happens to be — type before this and the
+   * letter lands beside the prompt instead of inside it, so the pane holds
+   * keystrokes until it arrives.
+   */
+  | { type: 'synced' }

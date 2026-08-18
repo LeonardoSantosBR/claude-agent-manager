@@ -84,9 +84,19 @@ export function TerminalPane({ sessionId, active }: Props) {
       fit.fit()
       send({ type: 'resize', cols: term.cols, rows: term.rows })
     }
+    // Claude echoes a typed character as a bare byte at the current cursor, so
+    // anything typed before the post-attach repaint lands beside the prompt.
+    // Keystrokes wait here until the server says the screen is in sync.
+    let synced = false
+    const held: string[] = []
+
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data as string) as ServerMessage
       if (message.type === 'data') term.write(message.data)
+      if (message.type === 'synced') {
+        synced = true
+        for (const data of held.splice(0)) send({ type: 'input', data })
+      }
       if (message.type === 'exit') {
         term.write(
           `\r\n\x1b[38;2;255;108;55m── session ended (code ${message.code ?? 0}) ──\x1b[0m\r\n`,
@@ -94,7 +104,10 @@ export function TerminalPane({ sessionId, active }: Props) {
       }
     }
 
-    const input = term.onData((data) => send({ type: 'input', data }))
+    const input = term.onData((data) => {
+      if (synced) send({ type: 'input', data })
+      else held.push(data)
+    })
 
     const observer = new ResizeObserver(() => {
       if (!host.offsetParent) return // hidden: measuring would give 0
