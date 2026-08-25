@@ -190,6 +190,11 @@ export class SessionManager extends EventEmitter {
       cols: session.cols,
       rows: session.rows,
       env: claudeEnv(),
+      // Windows' built-in ConPTY parks the cursor on the TUI's caret but keeps
+      // diffing from the last column it *wrote*, one to the right. Claude's
+      // prompt then echoes the first keystroke a column early — "❯a bc" instead
+      // of "❯ abc". The conpty.dll shipped with node-pty tracks it correctly.
+      useConptyDll: true,
     })
 
     session.proc = proc

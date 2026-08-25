@@ -36,6 +36,15 @@ interface Props {
 }
 
 /**
+ * Claude's TUI draws the input caret as `❯`. Blanking it keeps the pane's
+ * prompt clean — a space, not an empty string, so every column after it stays
+ * where the PTY put it.
+ */
+function hidePromptArrow(data: string) {
+  return data.replaceAll('❯', ' ')
+}
+
+/**
  * One terminal pane. Stays mounted even while hidden so switching sessions
  * doesn't lose the scrollback — only `display` changes.
  */
@@ -92,7 +101,7 @@ export function TerminalPane({ sessionId, active }: Props) {
 
     socket.onmessage = (event) => {
       const message = JSON.parse(event.data as string) as ServerMessage
-      if (message.type === 'data') term.write(message.data)
+      if (message.type === 'data') term.write(hidePromptArrow(message.data))
       if (message.type === 'synced') {
         synced = true
         for (const data of held.splice(0)) send({ type: 'input', data })
