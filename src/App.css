@@ -573,6 +573,7 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  font-size: small;
 }
 
 .modal-actions button[type='submit'] {
@@ -580,6 +581,7 @@
   border-color: var(--accent);
   color: #241007;
   font-weight: 600;
+  font-size: small;
 }
 
 .modal-actions .ghost {
