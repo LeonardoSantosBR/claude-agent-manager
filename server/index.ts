@@ -5,12 +5,14 @@ import type { ClientMessage, Group, ServerMessage, SessionMeta } from '../shared
 import { cancelLogin, loginState, logout, startLogin, submitCode } from './auth.ts'
 import { CLAUDE_BIN, CONFIG_DIR, PORT, readAuth } from './config.ts'
 import { listHistory } from './history.ts'
+import { ImageError, saveImage } from './images.ts'
 import { PickerError, pickerName, pickFolder } from './picker.ts'
 import { SessionManager } from './sessions.ts'
 import { flushState } from './store.ts'
 
 const app = express()
-app.use(express.json())
+// Pasted images arrive as base64 in the JSON body, which blows past the 100kb default.
+app.use(express.json({ limit: '25mb' }))
 
 const manager = new SessionManager()
 
@@ -104,6 +106,25 @@ app.post('/api/sessions/:id/restart', (req, res) => {
 app.post('/api/sessions/:id/stop', (req, res) => {
   manager.stop(req.params.id)
   res.json({ ok: true })
+})
+
+app.post('/api/sessions/:id/image', (req, res) => {
+  const session = manager.get(req.params.id)
+  if (!session) {
+    res.status(404).json({ error: 'session not found' })
+    return
+  }
+  try {
+    const path = saveImage(
+      session.meta.cwd,
+      String(req.body.mime ?? ''),
+      String(req.body.data ?? ''),
+    )
+    res.json({ path })
+  } catch (error) {
+    const status = error instanceof ImageError ? 400 : 500
+    res.status(status).json({ error: (error as Error).message })
+  }
 })
 
 app.delete('/api/sessions/:id', (req, res) => {

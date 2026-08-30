@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import type { ClientMessage, ServerMessage } from '../../shared/types.ts'
+import { api } from '../api.ts'
 import { closeSocket, wsUrl } from '../ws.ts'
 import '@xterm/xterm/css/xterm.css'
 
@@ -45,6 +46,44 @@ function hidePromptArrow(data: string) {
 }
 
 /**
+ * Browsers disagree on where a clipboard image lands: Chrome fills `items`,
+ * Firefox and some Linux builds only fill `files`. Read both.
+ */
+function clipboardImages(data: DataTransfer | null): File[] {
+  if (!data) return []
+  const found = new Map<string, File>()
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind !== 'file' || !item.type.startsWith('image/')) continue
+    const file = item.getAsFile()
+    if (file) found.set(`${file.name}:${file.size}:${file.lastModified}`, file)
+  }
+  for (const file of Array.from(data.files ?? [])) {
+    if (!file.type.startsWith('image/')) continue
+    found.set(`${file.name}:${file.size}:${file.lastModified}`, file)
+  }
+  return [...found.values()]
+}
+
+/** Strips the `data:image/png;base64,` prefix a FileReader result carries. */
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'))
+    reader.onload = () => {
+      const result = String(reader.result)
+      resolve(result.slice(result.indexOf(',') + 1))
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+/** Windows paths carry backslashes and spaces — quote them for the shell/TUI. */
+function quotePath(path: string) {
+  return /[\s"']/.test(path) ? `"${path.replaceAll('"', '\\"')}"` : path
+}
+
+
+/**
  * One terminal pane. Stays mounted even while hidden so switching sessions
  * doesn't lose the scrollback — only `display` changes.
  */
@@ -52,6 +91,30 @@ export function TerminalPane({ sessionId, active }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const sendRef = useRef<((data: string) => void) | null>(null)
+  // The paste listener lives on `window` (see below) and every mounted pane
+  // installs one, so each needs to know whether it is the visible one.
+  const activeRef = useRef(active)
+
+  /**
+   * Uploads pasted/dropped images and types their paths into the session.
+   * The path goes in wrapped in the bracketed-paste escapes: Claude's TUI
+   * treats a plain burst of keystrokes as typing and drops characters, but
+   * handles a bracketed paste atomically.
+   */
+  const sendImages = useCallback(
+    async (files: File[]) => {
+      for (const file of files) {
+        try {
+          const { path } = await api.uploadImage(sessionId, file.type, await toBase64(file))
+          sendRef.current?.(`\x1b[200~${quotePath(path)} \x1b[201~`)
+        } catch (error) {
+          console.error('[image] upload failed', error)
+        }
+      }
+    },
+    [sessionId],
+  )
 
   useEffect(() => {
     const host = hostRef.current
@@ -88,6 +151,7 @@ export function TerminalPane({ sessionId, active }: Props) {
     const send = (message: ClientMessage) => {
       if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
     }
+    sendRef.current = (data: string) => send({ type: 'input', data })
 
     socket.onopen = () => {
       fit.fit()
@@ -137,10 +201,44 @@ export function TerminalPane({ sessionId, active }: Props) {
       term.dispose()
       termRef.current = null
       fitRef.current = null
+      sendRef.current = null
     }
   }, [sessionId])
 
+  // xterm.js swallows `paste` on its own hidden textarea, so the listener goes
+  // on `window` — otherwise the event never reaches us.
   useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      if (!activeRef.current) return
+      const files = clipboardImages(event.clipboardData)
+      if (files.length === 0) return // plain text: let xterm handle it
+      event.preventDefault()
+      void sendImages(files)
+    }
+    const onDrop = (event: DragEvent) => {
+      if (!activeRef.current) return
+      const files = clipboardImages(event.dataTransfer)
+      if (files.length === 0) return
+      event.preventDefault()
+      void sendImages(files)
+    }
+    // Without this the browser navigates away to the dropped file.
+    const onDragOver = (event: DragEvent) => {
+      if (activeRef.current) event.preventDefault()
+    }
+
+    window.addEventListener('paste', onPaste)
+    window.addEventListener('drop', onDrop)
+    window.addEventListener('dragover', onDragOver)
+    return () => {
+      window.removeEventListener('paste', onPaste)
+      window.removeEventListener('drop', onDrop)
+      window.removeEventListener('dragover', onDragOver)
+    }
+  }, [sendImages])
+
+  useEffect(() => {
+    activeRef.current = active
     if (!active) return
     const id = requestAnimationFrame(() => {
       try {

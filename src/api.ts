@@ -48,6 +48,12 @@ export const api = {
   restart: (id: string) => request<SessionMeta>(`/sessions/${id}/restart`, { method: 'POST' }),
   stop: (id: string) => request<{ ok: true }>(`/sessions/${id}/stop`, { method: 'POST' }),
   remove: (id: string) => request<{ ok: true }>(`/sessions/${id}`, { method: 'DELETE' }),
+  /** Stores a pasted image beside the session and returns its absolute path. */
+  uploadImage: (id: string, mime: string, data: string) =>
+    request<{ path: string }>(`/sessions/${id}/image`, {
+      method: 'POST',
+      body: JSON.stringify({ mime, data }),
+    }),
   /** Opens the native folder picker on the desktop. null = cancelled. */
   pickFolder: (startIn?: string) =>
     request<{ path: string | null }>('/pick-folder', {
