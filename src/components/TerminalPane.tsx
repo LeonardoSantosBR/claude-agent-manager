@@ -77,6 +77,11 @@ function toBase64(file: File): Promise<string> {
   })
 }
 
+/** The async Clipboard API only exists in a secure context (https or localhost). */
+function canReadClipboard() {
+  return typeof navigator.clipboard?.read === 'function'
+}
+
 /** Windows paths carry backslashes and spaces — quote them for the shell/TUI. */
 function quotePath(path: string) {
   return /[\s"']/.test(path) ? `"${path.replaceAll('"', '\\"')}"` : path
@@ -95,6 +100,9 @@ export function TerminalPane({ sessionId, active }: Props) {
   // The paste listener lives on `window` (see below) and every mounted pane
   // installs one, so each needs to know whether it is the visible one.
   const activeRef = useRef(active)
+  // Ctrl+V is intercepted inside the terminal effect, which is created before
+  // the paste callback exists — a ref bridges the two.
+  const pasteRef = useRef<() => void>(() => {})
 
   /**
    * Uploads pasted/dropped images and types their paths into the session.
@@ -133,6 +141,21 @@ export function TerminalPane({ sessionId, active }: Props) {
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.loadAddon(new WebLinksAddon())
+    // Returning false keeps xterm from turning Ctrl+V into a ^V byte.
+    term.attachCustomKeyEventHandler((event) => {
+      // Over plain http from another host there is no Clipboard API: leave
+      // Ctrl+V to xterm rather than swallowing it into a no-op.
+      const isPaste =
+        canReadClipboard() &&
+        event.type === 'keydown' &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'v'
+      if (!isPaste) return true
+      event.preventDefault()
+      pasteRef.current()
+      return false
+    })
     term.open(host)
     try {
       fit.fit()
@@ -205,8 +228,42 @@ export function TerminalPane({ sessionId, active }: Props) {
     }
   }, [sessionId])
 
-  // xterm.js swallows `paste` on its own hidden textarea, so the listener goes
-  // on `window` — otherwise the event never reaches us.
+  /**
+   * xterm.js binds Ctrl+V on keydown and preventDefault()s it (its own paste
+   * shortcut is Ctrl+Shift+V), so the browser never fires a `paste` event and
+   * no clipboard listener can see the image. We read the clipboard ourselves —
+   * which needs a secure context, so `canReadClipboard` guards the takeover.
+   */
+  const pasteFromClipboard = useCallback(async () => {
+    try {
+      const items = await navigator.clipboard.read()
+      const files: File[] = []
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'))
+        if (!type) continue
+        const blob = await item.getType(type)
+        files.push(new File([blob], `clipboard.${type.split('/')[1]}`, { type }))
+      }
+      if (files.length > 0) {
+        await sendImages(files)
+        return
+      }
+    } catch (error) {
+      // No permission or no image on the clipboard — fall through to text.
+      console.debug('[image] clipboard.read failed', error)
+    }
+    const text = await navigator.clipboard.readText().catch(() => '')
+    if (text) sendRef.current?.(`[200~${text}[201~`)
+  }, [sendImages])
+
+  useEffect(() => {
+    pasteRef.current = () => void pasteFromClipboard()
+  }, [pasteFromClipboard])
+
+  // Ctrl+V never reaches here (xterm cancels it — see pasteFromClipboard), but
+  // the context-menu "Paste" still fires a real event. xterm handles it on its
+  // own hidden textarea and calls stopPropagation(), so this listener has to
+  // run in the capture phase, on the way *down*.
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       if (!activeRef.current) return
@@ -227,13 +284,13 @@ export function TerminalPane({ sessionId, active }: Props) {
       if (activeRef.current) event.preventDefault()
     }
 
-    window.addEventListener('paste', onPaste)
-    window.addEventListener('drop', onDrop)
-    window.addEventListener('dragover', onDragOver)
+    window.addEventListener('paste', onPaste, true)
+    window.addEventListener('drop', onDrop, true)
+    window.addEventListener('dragover', onDragOver, true)
     return () => {
-      window.removeEventListener('paste', onPaste)
-      window.removeEventListener('drop', onDrop)
-      window.removeEventListener('dragover', onDragOver)
+      window.removeEventListener('paste', onPaste, true)
+      window.removeEventListener('drop', onDrop, true)
+      window.removeEventListener('dragover', onDragOver, true)
     }
   }, [sendImages])
 
