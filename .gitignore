@@ -25,3 +25,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Images pasted into a session (see server/images.ts) — scratch files, and the
+# manager prunes them on its own.
+.claude/images/
