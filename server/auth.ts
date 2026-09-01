@@ -39,7 +39,7 @@ const strip = (chunk: string) => chunk.replace(ANSI, '')
  * The login screen also prints marketing/docs links, so "any URL" isn't enough —
  * only the OAuth one takes you somewhere that returns a code.
  */
-function findOauthUrl(text: string): string | null {
+export function findOauthUrl(text: string): string | null {
   for (const url of text.match(URLS) ?? []) {
     if (/oauth|authorize/i.test(url)) return url.replace(/[.,)\]]+$/, '')
   }

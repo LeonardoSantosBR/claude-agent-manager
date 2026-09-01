@@ -105,6 +105,15 @@ The sidebar footer shows who that is — the email (and organization) from
 | `npm run dev:server` | server only (5174) |
 | `npm run dev:server:watch` | same with `--watch` — **restarts and kills the PTYs** on every save |
 | `npm run build` | typecheck + front-end build |
+| `npm test` | vitest in watch mode |
+| `npm run test:run` | vitest once — what CI runs |
+
+The tests cover the server's pure-ish edges, where the bugs actually were: the
+origin gate, the state file (including the legacy array format), scrollback
+throttling and capping, paste pruning, and the `.jsonl` history scan. They run
+against a temp `AGENT_MANAGER_STATE_DIR`, so a test run never touches your real
+sessions. `.github/workflows/ci.yml` runs typecheck, lint, tests and build on
+Linux and Windows — Windows because that's where every PTY quirk in here lives.
 
 ## Layout
 
@@ -114,6 +123,7 @@ server/     sessions.ts (PTY + state)   history.ts (scans the .jsonl files)
             auth.ts (login flow)        index.ts (REST + websocket)
 shared/     types.ts shared by both sides
 src/        App.tsx, Sidebar, TerminalPane (xterm), NewSessionModal, LoginModal
+tests/      vitest, server side only
 ```
 
 Palette: background `#3c3c3c`, accent `#FF6C37`.

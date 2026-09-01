@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
   "scripts": {
     "dev": "concurrently -k -n server,web -c \"#FF6C37,#7db3e8\" \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "node server/index.ts",
@@ -10,6 +13,8 @@
     "dev:web": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "vitest",
+    "test:run": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -37,6 +42,7 @@
     "globals": "^17.7.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.65.0",
-    "vite": "^8.2.0"
+    "vite": "^8.2.0",
+    "vitest": "^4.1.11"
   }
 }

@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  check:
+    # Windows is where the PTY quirks live (ConPTY, backslash paths), Linux is
+    # where node-pty is easiest to build — the manager has to work on both.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The server runs .ts straight through node, which needs the built-in
+          # type stripping (>=22.6).
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: typecheck
+        run: npx tsc -b
+
+      - name: lint
+        run: npm run lint
+
+      - name: test
+        run: npm run test:run
+
+      - name: build
+        run: npx vite build
