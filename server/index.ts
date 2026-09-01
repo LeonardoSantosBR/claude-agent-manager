@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http'
-import express from 'express'
+import express, { type NextFunction, type Request, type Response } from 'express'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMessage, Group, ServerMessage, SessionMeta } from '../shared/types.ts'
 import { cancelLogin, loginState, logout, startLogin, submitCode } from './auth.ts'
@@ -21,8 +21,13 @@ app.use((req, res, next) => {
   res.status(403).json({ error: 'origin not allowed' })
 })
 
-// Pasted images arrive as base64 in the JSON body, which blows past the 100kb default.
-app.use(express.json({ limit: '25mb' }))
+// Pasted images arrive as base64, which blows past the 100kb default. Only that
+// route gets the bigger limit — every other endpoint takes a nickname or an id,
+// and shouldn't buffer 25MB before finding out it doesn't want it.
+const json = express.json()
+const imageJson = express.json({ limit: '25mb' })
+const IMAGE_ROUTE = /^\/api\/sessions\/[^/]+\/image$/
+app.use((req, res, next) => (IMAGE_ROUTE.test(req.path) ? imageJson : json)(req, res, next))
 
 const manager = new SessionManager()
 
@@ -155,6 +160,16 @@ app.post('/api/pick-folder', async (req, res) => {
 app.get('/api/history', async (_req, res) => {
   const openIds = new Set(manager.list().map((s) => s.id))
   res.json(await listHistory(CONFIG_DIR, openIds))
+})
+
+// A body that is too large, or not JSON at all, otherwise comes back as
+// express's HTML error page — which api.ts parses as JSON and reports as
+// "request failed".
+// The unused 4th parameter is not optional: express identifies error handlers
+// by arity, and a 3-arg version is treated as ordinary middleware.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((error: Error & { status?: number }, _req: Request, res: Response, _next: NextFunction) => {
+  res.status(error.status ?? 500).json({ error: error.message })
 })
 
 const server = createServer(app)

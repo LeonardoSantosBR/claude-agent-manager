@@ -63,7 +63,12 @@ export function useManager() {
           })
       }
       socket.onmessage = (event) => {
-        const message = JSON.parse(event.data as string) as ServerMessage
+        let message: ServerMessage
+        try {
+          message = JSON.parse(event.data as string) as ServerMessage
+        } catch {
+          return // truncated frame: nothing sane to do with it
+        }
         if (message.type === 'state') {
           setSessions(message.sessions)
           setGroups(message.groups)

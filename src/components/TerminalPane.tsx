@@ -117,6 +117,12 @@ export function TerminalPane({ sessionId, active }: Props) {
           const { path } = await api.uploadImage(sessionId, file.type, await toBase64(file))
           sendRef.current?.(`\x1b[200~${quotePath(path)} \x1b[201~`)
         } catch (error) {
+          // The pane *is* the UI here: a paste that silently does nothing looks
+          // like the app ignored the keystroke.
+          const reason = error instanceof Error ? error.message : 'upload failed'
+          termRef.current?.write(
+            `\r\n\x1b[38;2;255;108;55m── image not sent: ${reason} ──\x1b[0m\r\n`,
+          )
           console.error('[image] upload failed', error)
         }
       }

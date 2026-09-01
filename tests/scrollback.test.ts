@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { STATE_DIR } from '../server/config.ts'
 import {
   dropScrollback,
@@ -13,7 +13,17 @@ import {
 // same STATE_DIR.
 const DIR = join(STATE_DIR, 'scrollback')
 
+/** The throttle, plus a beat for the async write to actually land. */
+const THROTTLE_MS = 2500
+
+async function tick() {
+  vi.advanceTimersByTime(THROTTLE_MS)
+  vi.useRealTimers()
+  await vi.waitFor(() => {}, { timeout: 1000, interval: 10 })
+}
+
 afterEach(() => {
+  vi.useRealTimers()
   flushScrollback()
   rmSync(DIR, { recursive: true, force: true })
 })
@@ -52,6 +62,24 @@ describe('scrollback', () => {
     const stored = readScrollback('a1')
     expect(stored.length).toBe(limit)
     expect(stored.endsWith('END')).toBe(true)
+  })
+
+  it('writes on its own once the throttle fires, without a flush', async () => {
+    vi.useFakeTimers()
+    saveScrollback('a1', 'written by the timer')
+    expect(readScrollback('a1')).toBe('') // nothing yet: that is the throttle
+    await tick()
+    await vi.waitFor(() => expect(readScrollback('a1')).toBe('written by the timer'))
+  })
+
+  it('does not resurrect a session deleted while its write was in flight', async () => {
+    vi.useFakeTimers()
+    saveScrollback('a1', 'x'.repeat(256 * 1024))
+    vi.advanceTimersByTime(THROTTLE_MS) // starts the async write
+    vi.useRealTimers()
+    dropScrollback('a1')
+    await vi.waitFor(() => expect(readScrollback('a1')).toBe(''), { timeout: 1000 })
+    expect(readScrollback('a1')).toBe('')
   })
 
   it('drops the file and any write still queued for it', () => {
