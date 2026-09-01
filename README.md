@@ -30,9 +30,14 @@ browser (xterm.js) ──ws──▶ server/sessions.ts ──node-pty──▶ 
 - Every session is a real `claude` in a PTY, with a `--session-id <uuid>`
   generated here. That id is the same one Claude Code uses in its history, so
   resuming is just `--resume <same id>`.
-- Agents live on the **server**, not in the tab. Closing the browser, reloading,
-  or opening from another machine on the network kills nothing — on reconnect the
-  server replays the scrollback (512KB per session) and forces the TUI to redraw.
+- Agents live on the **server**, not in the tab. Closing the browser, reloading
+  or opening a second tab kills nothing — on reconnect the server replays the
+  scrollback (512KB per session) and forces the TUI to redraw.
+- **The server is loopback-only.** It listens on `127.0.0.1` and refuses any
+  request or websocket whose `Origin` isn't localhost, because every endpoint
+  here can start a `claude` in any folder on the machine, signed in as you —
+  reachable from the network, that is remote code execution. `HOST=0.0.0.0`
+  opens it up if you really mean to; put authentication in front of it first.
 - **Groups** work like Postman collections: create a group (say `curiosity`) and
   hang as many sessions off it as you want. The `+` in a group header opens the
   modal with it preselected, and the group learns its folder from the first

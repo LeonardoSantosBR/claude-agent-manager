@@ -1,0 +1,374 @@
+{
+  "updated_at": "2026-07-27T00:00:00Z",
+  "source": "notion (single page) — single source of truth",
+  "buckets": [
+    {
+      "title": "Autoimaging",
+      "kind": "project",
+      "slack_channel": "x-autoimaging",
+      "aliases": [
+        "autoimaging",
+        "x-autoimaging",
+        "x-autoimaging-dev-shared",
+        "x-autoimaging-qa-shared",
+        "x-autoimaging-shared"
+      ]
+    },
+    {
+      "title": "Baandy",
+      "kind": "project",
+      "slack_channel": "x-baandy",
+      "aliases": [
+        "baandy",
+        "x-baandy",
+        "x-baandy-shared"
+      ]
+    },
+    {
+      "title": "Becon",
+      "kind": "project",
+      "slack_channel": "x-becon",
+      "aliases": [
+        "becon",
+        "x-becon",
+        "x-becon-shared",
+        "x-becon-shared-aso"
+      ]
+    },
+    {
+      "title": "Big Trail Adventures",
+      "kind": "project",
+      "slack_channel": "x-big-trail-adventures",
+      "aliases": [
+        "big trail adventures",
+        "big-trail-adventures",
+        "x-big-trail-adventures",
+        "bigtrailadventures",
+        "x-big-trail-adventures-shared"
+      ]
+    },
+    {
+      "title": "BST",
+      "kind": "project",
+      "slack_channel": "x-bst",
+      "aliases": [
+        "bst",
+        "x-bst",
+        "x-bst-shared"
+      ]
+    },
+    {
+      "title": "Cherry",
+      "kind": "project",
+      "slack_channel": "x-cherry",
+      "aliases": [
+        "cherry",
+        "x-cherry",
+        "x-cherry-errors",
+        "x-cherry-infos",
+        "x-cherry-marketing-shared",
+        "x-cherry-shared"
+      ]
+    },
+    {
+      "title": "Cicerone App",
+      "kind": "project",
+      "slack_channel": "x-cicerone-app",
+      "aliases": [
+        "cicerone app",
+        "cicerone-app",
+        "x-cicerone-app",
+        "ciceroneapp",
+        "x-cicerone-app-shared"
+      ]
+    },
+    {
+      "title": "Connect",
+      "kind": "project",
+      "slack_channel": "x-connect",
+      "aliases": [
+        "connect",
+        "x-connect",
+        "x-connect-quality-assurance",
+        "x-connect-shared"
+      ]
+    },
+    {
+      "title": "Dooit",
+      "kind": "project",
+      "slack_channel": "x-dooit",
+      "aliases": [
+        "dooit",
+        "x-dooit",
+        "x-dooit-shared"
+      ]
+    },
+    {
+      "title": "Eworkflow",
+      "kind": "project",
+      "slack_channel": "x-eworkflow",
+      "aliases": [
+        "eworkflow",
+        "x-eworkflow",
+        "x-eworkflow-shared"
+      ]
+    },
+    {
+      "title": "Gemdarr",
+      "kind": "project",
+      "slack_channel": "x-gemdarr",
+      "aliases": [
+        "gemdarr",
+        "x-gemdarr",
+        "x-gemdarr-shared"
+      ]
+    },
+    {
+      "title": "Go Quest Adventure",
+      "kind": "project",
+      "slack_channel": "x-go-quest-adventure",
+      "aliases": [
+        "go quest adventure",
+        "go-quest-adventure",
+        "x-go-quest-adventure",
+        "goquestadventure",
+        "x-go-quest-adventure-shared"
+      ]
+    },
+    {
+      "title": "Hurdl",
+      "kind": "project",
+      "slack_channel": "x-hurdl",
+      "aliases": [
+        "hurdl",
+        "x-hurdl",
+        "x-hurdl-shared"
+      ]
+    },
+    {
+      "title": "Kite",
+      "kind": "project",
+      "slack_channel": "x-kite",
+      "aliases": [
+        "kite",
+        "x-kite",
+        "x-kite-shared",
+        "x-kite-testing"
+      ]
+    },
+    {
+      "title": "Mediationx",
+      "kind": "project",
+      "slack_channel": "x-mediationx",
+      "aliases": [
+        "mediationx",
+        "x-mediationx",
+        "x-mediationx-shared"
+      ]
+    },
+    {
+      "title": "Nichecom",
+      "kind": "project",
+      "slack_channel": "x-nichecom",
+      "aliases": [
+        "nichecom",
+        "x-nichecom",
+        "x-nichecom-shared"
+      ]
+    },
+    {
+      "title": "Oneplace",
+      "kind": "project",
+      "slack_channel": "x-oneplace",
+      "aliases": [
+        "oneplace",
+        "x-oneplace",
+        "x-oneplace-shared"
+      ]
+    },
+    {
+      "title": "Optimum Nutrition",
+      "kind": "project",
+      "slack_channel": "x-optimum-nutrition",
+      "aliases": [
+        "optimum nutrition",
+        "optimum-nutrition",
+        "x-optimum-nutrition",
+        "optimumnutrition"
+      ]
+    },
+    {
+      "title": "Raccoon",
+      "kind": "project",
+      "slack_channel": "x-raccoon",
+      "aliases": [
+        "raccoon",
+        "x-raccoon"
+      ]
+    },
+    {
+      "title": "Revulk Calculator",
+      "kind": "project",
+      "slack_channel": "x-revulk-calculator",
+      "aliases": [
+        "revulk calculator",
+        "revulk-calculator",
+        "x-revulk-calculator",
+        "revulkcalculator",
+        "x-revulk-calculator-shared"
+      ]
+    },
+    {
+      "title": "SBU Integrations",
+      "kind": "project",
+      "slack_channel": "x-sbu-integrations",
+      "aliases": [
+        "sbu integrations",
+        "sbu-integrations",
+        "x-sbu-integrations",
+        "sbuintegrations",
+        "x-sbu-integrations-shared"
+      ]
+    },
+    {
+      "title": "Skamper",
+      "kind": "project",
+      "slack_channel": "x-skamper",
+      "aliases": [
+        "skamper",
+        "x-skamper",
+        "x-skamper-errors",
+        "x-skamper-redirect",
+        "x-skamper-shared",
+        "x-skamper-website-shared"
+      ]
+    },
+    {
+      "title": "Template",
+      "kind": "project",
+      "slack_channel": "template",
+      "aliases": [
+        "template",
+        " internal-libs-monorepo",
+        "web-template",
+        "monorepo-template",
+        "mobile-template",
+        "project-template-backend",
+        "specs-template"
+      ]
+    },
+    {
+      "title": "Udokk",
+      "kind": "project",
+      "slack_channel": "x-udokk",
+      "aliases": [
+        "udokk",
+        "x-udokk",
+        "x-udokk-shared"
+      ]
+    },
+    {
+      "title": "Design",
+      "kind": "area",
+      "aliases": [
+        "design",
+        "design-ai",
+        "figma"
+      ]
+    },
+    {
+      "title": "Development",
+      "kind": "area",
+      "aliases": [
+        "development",
+        "dev",
+        "coding",
+        "backend"
+      ]
+    },
+    {
+      "title": "Humans",
+      "kind": "area",
+      "aliases": [
+        "humans",
+        "people-ops",
+        "hr",
+        "hiring",
+        "human-resources"
+      ]
+    },
+    {
+      "title": "Hype",
+      "kind": "area",
+      "aliases": [
+        "hype"
+      ]
+    },
+    {
+      "title": "Finance",
+      "kind": "area",
+      "aliases": [
+        "money",
+        "finance",
+        "Finance & Reconciliation",
+        "Business Operations & Invoicing"
+      ]
+    },
+    {
+      "title": "Navigation",
+      "kind": "area",
+      "aliases": [
+        "navigation"
+      ]
+    },
+    {
+      "title": "Product",
+      "kind": "area",
+      "aliases": [
+        "product"
+      ]
+    },
+    {
+      "title": "QA",
+      "kind": "area",
+      "aliases": [
+        "qa",
+        "quality-assurance"
+      ]
+    },
+    {
+      "title": "Sales",
+      "kind": "area",
+      "aliases": [
+        "sales",
+        "sales-ops",
+        "business-and-sales-operations"
+      ]
+    },
+    {
+      "title": "Leadership",
+      "kind": "area",
+      "aliases": [
+        "leadership",
+        "leadership-team"
+      ]
+    },
+    {
+      "title": "Mentorship",
+      "kind": "area",
+      "aliases": [
+        "mentorship",
+        "mentoring",
+        "mentor",
+        "mentee"
+      ]
+    },
+    {
+      "title": "Shareholders",
+      "kind": "area",
+      "aliases": [
+        "shareholders"
+      ]
+    }
+  ]
+}

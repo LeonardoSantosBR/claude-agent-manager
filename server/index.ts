@@ -3,7 +3,7 @@ import express from 'express'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMessage, Group, ServerMessage, SessionMeta } from '../shared/types.ts'
 import { cancelLogin, loginState, logout, startLogin, submitCode } from './auth.ts'
-import { CLAUDE_BIN, CONFIG_DIR, PORT, readAuth } from './config.ts'
+import { CLAUDE_BIN, CONFIG_DIR, HOST, originAllowed, PORT, readAuth } from './config.ts'
 import { listHistory } from './history.ts'
 import { ImageError, saveImage } from './images.ts'
 import { PickerError, pickerName, pickFolder } from './picker.ts'
@@ -11,6 +11,16 @@ import { SessionManager } from './sessions.ts'
 import { flushState } from './store.ts'
 
 const app = express()
+
+// First thing on the stack: a cross-origin page must not reach any of this.
+// See originAllowed() — the check is on Origin, not on a token, because the
+// server is loopback-only and the only attacker that can reach it is a website
+// open in this machine's browser.
+app.use((req, res, next) => {
+  if (originAllowed(req.headers.origin)) return next()
+  res.status(403).json({ error: 'origin not allowed' })
+})
+
 // Pasted images arrive as base64 in the JSON body, which blows past the 100kb default.
 app.use(express.json({ limit: '25mb' }))
 
@@ -156,6 +166,9 @@ server.on('upgrade', (request, socket, head) => {
   socket.on('error', () => {})
   const url = new URL(request.url ?? '/', 'http://localhost')
   if (url.pathname !== '/ws') return socket.destroy()
+  // Websockets are exempt from the same-origin policy, so this handshake is the
+  // only thing standing between a random tab and a live PTY.
+  if (!originAllowed(request.headers.origin)) return socket.destroy()
   wss.handleUpgrade(request, socket, head, (ws) => {
     wss.emit('connection', ws, request, url.searchParams)
   })
@@ -262,7 +275,14 @@ server.on('error', (error: NodeJS.ErrnoException) => {
   throw error
 })
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+    console.warn(
+      `[agent-manager] listening on ${HOST} — this server can run commands in any
+` +
+        `  folder on this machine. Do not expose it on an untrusted network.`,
+    )
+  }
   console.log(
     `[agent-manager] http://localhost:${PORT}  claude=${CLAUDE_BIN}  ` +
       `folder picker=${pickerName ?? 'unavailable'}`,

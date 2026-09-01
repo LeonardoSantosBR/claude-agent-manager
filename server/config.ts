@@ -7,6 +7,28 @@ import { which } from './which.ts'
 export const PORT = Number(process.env.PORT ?? 5174)
 
 /**
+ * Loopback only, deliberately. Every endpoint here can spawn a `claude` in any
+ * folder on this machine, with the tokens of whoever is logged in — binding to
+ * 0.0.0.0 would hand remote code execution to anyone on the same Wi-Fi. Set
+ * HOST to open it up on purpose (and put something in front of it).
+ */
+export const HOST = process.env.HOST ?? '127.0.0.1'
+
+/**
+ * A page on any origin can POST to http://localhost:5174 from the browser of
+ * whoever is running this. JSON bodies and websockets both carry an Origin
+ * header, so we can just refuse the ones that aren't ours; requests with no
+ * Origin at all (curl, the app's own server-side calls) are not browser-driven
+ * and pass. VITE_* dev ports vary, so any loopback origin is accepted.
+ */
+const LOOPBACK_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/
+
+export function originAllowed(origin: string | undefined): boolean {
+  if (!origin) return true
+  return LOOPBACK_ORIGIN.test(origin)
+}
+
+/**
  * Where we keep our own state (nicknames, groups).
  * Overridable so a test instance can run without touching the real one.
  */
