@@ -165,29 +165,45 @@ export function TerminalPane({ sessionId, active }: Props) {
     termRef.current = term
     fitRef.current = fit
 
-    // The size travels in the URL so the server can resize the PTY *before*
-    // replaying: bytes drawn at another width land with the cursor a column off,
-    // and the next keystroke shows up beside the prompt instead of inside it.
-    const socket = new WebSocket(
-      wsUrl(`/ws?session=${sessionId}&cols=${term.cols}&rows=${term.rows}`),
-    )
-    const send = (message: ClientMessage) => {
-      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
-    }
-    sendRef.current = (data: string) => send({ type: 'input', data })
-
-    socket.onopen = () => {
-      fit.fit()
-      send({ type: 'resize', cols: term.cols, rows: term.rows })
-    }
     // Claude echoes a typed character as a bare byte at the current cursor, so
     // anything typed before the post-attach repaint lands beside the prompt.
-    // Keystrokes wait here until the server says the screen is in sync.
+    // Keystrokes wait here until the server says the screen is in sync — and
+    // again after every reconnect, which repeats the same attach dance.
     let synced = false
     const held: string[] = []
 
-    socket.onmessage = (event) => {
-      const message = JSON.parse(event.data as string) as ServerMessage
+    // The socket is replaced on every reconnect, so nothing may capture it.
+    let socket: WebSocket | null = null
+    let disposed = false
+    let retry: ReturnType<typeof setTimeout> | undefined
+    let attempt = 0
+
+    const send = (message: ClientMessage) => {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
+    }
+    sendRef.current = (data: string) => send({ type: 'input', data })
+
+    const handleOpen = () => {
+      attempt = 0
+      // attach() replays the whole scrollback on *every* connection, so the
+      // screen has to be blank first — otherwise reconnecting stacks a second
+      // copy of the session under the first.
+      term.reset()
+      try {
+        fit.fit()
+      } catch {
+        /* container has no size yet */
+      }
+      send({ type: 'resize', cols: term.cols, rows: term.rows })
+    }
+
+    const handleMessage = (event: MessageEvent) => {
+      let message: ServerMessage
+      try {
+        message = JSON.parse(event.data as string) as ServerMessage
+      } catch {
+        return // truncated frame: nothing sane to do with it
+      }
       if (message.type === 'data') term.write(hidePromptArrow(message.data))
       if (message.type === 'synced') {
         synced = true
@@ -199,6 +215,46 @@ export function TerminalPane({ sessionId, active }: Props) {
         )
       }
     }
+
+    const handleClose = (event: CloseEvent) => {
+      // A socket we already replaced, or tore down, has nothing left to say.
+      if (disposed || event.target !== socket) return
+      synced = false
+      // 4004 is the server saying the session is gone — the one close that
+      // reconnecting cannot fix.
+      if (event.code === 4004) {
+        term.write('\r\n\x1b[38;2;255;108;55m── session not found ──\x1b[0m\r\n')
+        return
+      }
+      // Only on the first failure: a successful reconnect resets the screen
+      // anyway, and repeating the notice during a long outage would scroll the
+      // last frame out of view.
+      if (attempt === 0) {
+        term.write('\r\n\x1b[38;2;122;122;122m── disconnected, reconnecting… ──\x1b[0m\r\n')
+      }
+      // Backs off to 8s, so a server that stays down isn't hammered while a
+      // quick restart is still picked up almost immediately.
+      retry = setTimeout(connect, Math.min(1000 * 2 ** attempt, 8000))
+      attempt += 1
+    }
+
+    function connect() {
+      if (disposed) return
+      synced = false
+      // The size travels in the URL so the server can resize the PTY *before*
+      // replaying: bytes drawn at another width land with the cursor a column
+      // off, and the next keystroke shows up beside the prompt instead of
+      // inside it.
+      const ws = new WebSocket(
+        wsUrl(`/ws?session=${sessionId}&cols=${term.cols}&rows=${term.rows}`),
+      )
+      socket = ws
+      ws.onopen = handleOpen
+      ws.onmessage = handleMessage
+      ws.onclose = handleClose
+    }
+
+    connect()
 
     const input = term.onData((data) => {
       if (synced) send({ type: 'input', data })
@@ -217,10 +273,15 @@ export function TerminalPane({ sessionId, active }: Props) {
     observer.observe(host)
 
     return () => {
+      disposed = true
+      clearTimeout(retry)
       observer.disconnect()
       input.dispose()
-      socket.onmessage = null
-      closeSocket(socket)
+      if (socket) {
+        socket.onmessage = null
+        socket.onclose = null
+        closeSocket(socket)
+      }
       term.dispose()
       termRef.current = null
       fitRef.current = null
