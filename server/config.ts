@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { AccountIdentity, AuthStatus } from '../shared/types.ts'
 import { which } from './which.ts'
 
@@ -13,6 +14,18 @@ export const PORT = Number(process.env.PORT ?? 5174)
  * HOST to open it up on purpose (and put something in front of it).
  */
 export const HOST = process.env.HOST ?? '127.0.0.1'
+
+/**
+ * Whether the server also hands out the built front-end (`dist/`), instead of
+ * leaving that to the vite dev server. The flag exists because `NODE_ENV=x cmd`
+ * isn't a thing on Windows, and this project refuses to grow a dependency to
+ * fix that.
+ */
+export const SERVE_WEB =
+  process.argv.includes('--serve-web') || process.env.NODE_ENV === 'production'
+
+/** The bundle vite writes — resolved from this file, not from the cwd. */
+export const DIST_DIR = resolve(fileURLToPath(new URL('../dist', import.meta.url)))
 
 /**
  * A page on any origin can POST to http://localhost:5174 from the browser of

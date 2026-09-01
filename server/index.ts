@@ -1,9 +1,20 @@
+import { existsSync } from 'node:fs'
 import { createServer, type IncomingMessage } from 'node:http'
+import { join, sep } from 'node:path'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { ClientMessage, Group, ServerMessage, SessionMeta } from '../shared/types.ts'
 import { cancelLogin, loginState, logout, startLogin, submitCode } from './auth.ts'
-import { CLAUDE_BIN, CONFIG_DIR, HOST, originAllowed, PORT, readAuth } from './config.ts'
+import {
+  CLAUDE_BIN,
+  CONFIG_DIR,
+  DIST_DIR,
+  HOST,
+  originAllowed,
+  PORT,
+  readAuth,
+  SERVE_WEB,
+} from './config.ts'
 import { listHistory } from './history.ts'
 import { ImageError, saveImage } from './images.ts'
 import { PickerError, pickerName, pickFolder } from './picker.ts'
@@ -162,6 +173,46 @@ app.get('/api/history', async (_req, res) => {
   res.json(await listHistory(CONFIG_DIR, openIds))
 })
 
+// Past every route above, an /api call is a typo — and api.ts expects JSON, not
+// express's HTML 404. Before the static handler, so it can't be answered with
+// the app's index.html.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'no such endpoint' })
+})
+
+// With --serve-web there is no vite in the picture: one process, one port,
+// serving both the API and the built page. Mounted after the API routes so it
+// can never shadow one.
+if (SERVE_WEB) {
+  if (!existsSync(join(DIST_DIR, 'index.html'))) {
+    console.error(`[agent-manager] no build to serve at ${DIST_DIR} — run \`npm run build\` first`)
+    process.exit(1)
+  }
+  app.use(
+    express.static(DIST_DIR, {
+      // index.html is served by the fallback below, with its own headers.
+      index: false,
+      setHeaders: (res, path) => {
+        // Vite fingerprints everything under assets/, so those are safe to
+        // cache forever; anything else keeps the default (revalidate).
+        if (path.includes(`${sep}assets${sep}`)) {
+          res.setHeader('cache-control', 'public, max-age=31536000, immutable')
+        }
+      },
+    }),
+  )
+  // Single-page app: any GET that isn't a file and isn't the API is a route
+  // React handles, so it gets index.html and the router sorts it out.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next()
+    if (req.path.startsWith('/api/')) return next()
+    // Never cached: it names the hashed bundles, so a stale copy pins the app
+    // to a build that no longer exists.
+    res.setHeader('cache-control', 'no-store')
+    res.sendFile(join(DIST_DIR, 'index.html'))
+  })
+}
+
 // A body that is too large, or not JSON at all, otherwise comes back as
 // express's HTML error page — which api.ts parses as JSON and reports as
 // "request failed".
@@ -299,8 +350,8 @@ server.listen(PORT, HOST, () => {
     )
   }
   console.log(
-    `[agent-manager] http://localhost:${PORT}  claude=${CLAUDE_BIN}  ` +
-      `folder picker=${pickerName ?? 'unavailable'}`,
+    `[agent-manager] http://localhost:${PORT}  ${SERVE_WEB ? 'app + api' : 'api only'}  ` +
+      `claude=${CLAUDE_BIN}  folder picker=${pickerName ?? 'unavailable'}`,
   )
   const auth = readAuth()
   const who = auth.identity?.email ?? 'unknown account'

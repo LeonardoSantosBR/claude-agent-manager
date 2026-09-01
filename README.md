@@ -9,6 +9,16 @@ logged-in Claude account at the bottom.
 
 ```
 npm install
+npm run build   # builds the front-end into dist/
+npm start       # one process on 5174, serving the app *and* the API
+```
+
+Open http://localhost:5174.
+
+While working on the manager itself, use the dev setup instead — vite with hot
+reload on 5173, proxying `/api` to the server on 5174:
+
+```
 npm run dev     # starts the server (5174) + web (5173)
 ```
 
@@ -105,6 +115,7 @@ The sidebar footer shows who that is — the email (and organization) from
 | `npm run dev:server` | server only (5174) |
 | `npm run dev:server:watch` | same with `--watch` — **restarts and kills the PTYs** on every save |
 | `npm run build` | typecheck + front-end build |
+| `npm start` | serves `dist/` **and** the API from one process on 5174 (`--serve-web`) |
 | `npm test` | vitest in watch mode |
 | `npm run test:run` | vitest once — what CI runs |
 

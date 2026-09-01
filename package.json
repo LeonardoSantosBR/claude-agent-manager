@@ -12,6 +12,7 @@
     "dev:server:watch": "node --watch server/index.ts",
     "dev:web": "vite",
     "build": "tsc -b && vite build",
+    "start": "node server/index.ts --serve-web",
     "lint": "eslint .",
     "test": "vitest",
     "test:run": "vitest run",

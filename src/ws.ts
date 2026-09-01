@@ -1,4 +1,11 @@
-const SERVER_PORT = import.meta.env.VITE_SERVER_PORT ?? '5174'
+/**
+ * In dev the page is vite's (5173) and the server is somewhere else; in a build
+ * the server is the one that just served this page, whatever port it ended up
+ * on — so hardcoding 5174 would break `PORT=xxxx npm start`.
+ */
+const SERVER_PORT = import.meta.env.DEV
+  ? (import.meta.env.VITE_SERVER_PORT ?? '5174')
+  : location.port
 
 /**
  * Websockets talk straight to the Node server, skipping vite's proxy.
